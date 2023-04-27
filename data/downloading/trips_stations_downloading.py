@@ -2,14 +2,16 @@ import pandas as pd
 import re
 import requests
 import os
+import time
 from selenium.webdriver.common.by import By
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager #details: https://pypi.org/project/webdriver-manager/
 from dateutil import rrule
 from datetime import datetime
+import zipfile
 
-data_dl_path = '/stations_raw'
+data_dl_path = os.path.join(os.path.dirname(__file__), 'stations_raw')
 
 start_date = datetime(2018, 7, 1)
 end_date = datetime(2021, 6, 30)
@@ -59,11 +61,16 @@ for link in links:
                hrefs.append(link.get_attribute('href'))
                titles.append(link_title)
                link.click()
+               time.sleep(5)
+
+time.sleep(10)
+
+driver.close()
 
 print(hrefs)
 print(titles)
+current_time = datetime.now().time()
 
+pd.DataFrame({'title':titles, 'links':hrefs}).to_csv(f'{data_dl_path}/download_{current_time}.csv')
 
-
-
-
+# unzip files
