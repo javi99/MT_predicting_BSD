@@ -1,7 +1,7 @@
 import pandas as pd
 import re
 import requests
-import os
+import os, stat
 import time
 from selenium.webdriver.common.by import By
 from selenium import webdriver
@@ -10,9 +10,12 @@ from webdriver_manager.chrome import ChromeDriverManager #details: https://pypi.
 from dateutil import rrule
 from datetime import datetime
 import zipfile
+import rarfile
+import shutil
+
 
 #data_dl_path = os.path.join(os.path.dirname(__file__), 'stations_raw')
-data_dl_path = os.getcwd()+'/data/downloading/stations_raw'
+data_dl_path = os.getcwd()+'/data/downloading/stations_raw/'
 
 
 start_date = datetime(2018, 7, 1)
@@ -43,7 +46,7 @@ months = [months_translator[month] for month in months]
 
 
 options = webdriver.ChromeOptions()
-prefs = {"download.default_directory" : data_dl_path}
+prefs = {"download.default_directory" : data_dl_path[:-1]}
 options.add_experimental_option("prefs",prefs)
 
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
@@ -63,9 +66,9 @@ for link in links:
                hrefs.append(link.get_attribute('href'))
                titles.append(link_title)
                link.click()
-               time.sleep(5)
+               time.sleep(10)
 
-time.sleep(30)
+time.sleep(45)
 
 driver.close()
 
@@ -76,53 +79,57 @@ print(hrefs)
 print(titles)
 current_time = datetime.now().time()
 
-pd.DataFrame({'title':titles, 'links':hrefs}).to_csv(f'{data_dl_path}/download_{current_time}.csv')
+pd.DataFrame({'title':titles, 'links':hrefs}).to_csv(f'{data_dl_path}download_{current_time}.csv')
 
-# unzip files
-zip_path = "/path/to/archive.zip"
-
-# Specify the path to the directory where files will be extracted
-extract_path = "/path/to/extract"
-
-#match files to their href
+'''
+#match files to their href?
 
 dl_files = []
 for href in hrefs:
     p = re.search('(?<=\/)[^\/]+?(?=\.aspx)', href)
     dl_files.append(p.group(0))
 
+'''
+
 files_dl = os.listdir(data_dl_path)
 
-
-
-
 def ziporrar(file):
-    if '.zip' in file or '.rar' in file:
-        return True
+    if '.zip' in file[-4:]:
+        return 'zip'
+    elif '.rar' in file[-4:]:
+        return 'rar'
     else:
-        return False
+        print(file)
 
-def unzipper(files):
-    for file in files:
-        if ziporrar(file):
-            print('ok')
+def unzipper(file):
+    ftype = ziporrar(file)
+    if ftype == 'zip':
+        with zipfile.ZipFile(data_dl_path+ file, 'r') as zip_ref:
+            zip_ref.extractall(data_dl_path + file[:-4])
+        os.remove(data_dl_path + file)
+
+    elif ftype == 'rar':
+        try:
+            rar = rarfile.RarFile(data_dl_path + file)
+            rar.extractall(data_dl_path)
+            os.remove(data_dl_path + file)
+        except:
+            print(file)
+
+        
+for file in files_dl:
+    unzipper(file)
 
 
-    # 1. check if file is .zip or .rar or other
-    # 2. unzip file and put contents into extract folder (same name as title?)
-    # 3. delete .zip and .rar files
+files_dl = os.listdir(data_dl_path)
 
-
-
-
-'''
-# Create the extract directory if it doesn't exist
-if not os.path.exists(extract_path):
-    os.makedirs(extract_path)
-
-
-# Open the zip archive for reading
-with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-    # Extract all files to the extract directory
-    zip_ref.extractall(extract_path)
-'''
+for file in files_dl:
+    if os.path.isdir(data_dl_path + file):
+        datas = os.listdir(data_dl_path + file)
+        for data in datas:
+            os.chmod(data_dl_path + file + '/' + data, 0o777)
+            if '__MACOSX' in data:
+                os.rmdir(data_dl_path + file + '/' + data)
+                continue
+            shutil.move(data_dl_path + file + '/' + data ,data_dl_path)
+        os.rmdir(data_dl_path + file)
