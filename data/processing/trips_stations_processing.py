@@ -87,8 +87,6 @@ def create_stations_df(stations):
 
         data = load_json_bad_format(path)
 
-        #station_data = pd.DataFrame(data)
-
         stations_dataset = pd.concat([stations_dataset, pd.DataFrame(data)], axis=0, ignore_index=True)
 
     return stations_dataset
@@ -117,22 +115,25 @@ def create_movements_df(movements):
         print(len(data))
         
         movement_data = pd.DataFrame(data)
-        movements_data["_id"] = movements_data["_id"].apply(lambda id: id["$oid"])
-        try:
-            movements_data["unplug_hourTime"] = movements_data["unplug_hourTime"].apply(lambda date: date["unplug_hourTime"])
-        except:
-            pass
+        movement_data["_id"] = movement_data["_id"].apply(lambda id: id["$oid"])
+        #movement_data["unplug_hourTime"] = movement_data["unplug_hourTime"].apply(lambda date: date["$date"] if date is dict else date)
         
+        for i in range(len(movement_data)):
+            if type(movement_data.loc[i, 'unplug_hourTime']) is dict:
+                print(i)
+                time = movement_data.loc[i, 'unplug_hourTime']
+                movement_data.loc[i, 'unplug_hourTime'] = time["$date"]
+
         movement_data = movement_data.replace("",np.NaN)
         
-        movements_dataset = pd.concat([movements_dataset, pd.DataFrame(data)], axis=0, ignore_index=True)
+        movements_dataset = pd.concat([movements_dataset, pd.DataFrame(movement_data)], axis=0, ignore_index=True)
 
     return movements_dataset
 
 
 ### Code starts here ####
 
-data_path = '/data/downloading/stations_raw/'
+data_path = '/data/storage/'
 
 files_dl = os.listdir(os.getcwd() + data_path)
 files_dl = [file for file in files_dl if '.json' in file]
@@ -141,8 +142,10 @@ files_dl = [file for file in files_dl if '.json' in file]
 stations = [file for file in files_dl if 'Usage' not in file and 'movements' not in file] 
 movements = list(set(files_dl) - set(stations))
 
-stations_data = create_stations_df(stations[:5])
+stations_data = create_stations_df(stations)
 
 movements_data = create_movements_df(movements[:3])
 
- 
+stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data.csv')
+
+movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data.csv')

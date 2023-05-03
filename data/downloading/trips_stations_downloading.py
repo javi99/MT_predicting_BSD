@@ -14,8 +14,8 @@ import rarfile
 import shutil
 
 
-#data_dl_path = os.path.join(os.path.dirname(__file__), 'stations_raw')
-data_dl_path = os.getcwd()+'/data/downloading/stations_raw/'
+#data_dl_path = os.path.join(os.path.dirname(__file__), 'storage')
+data_dl_path = os.getcwd()+'/data/storage/'
 
 
 start_date = datetime(2018, 7, 1)
@@ -80,16 +80,6 @@ print(titles)
 current_time = datetime.now().time()
 
 pd.DataFrame({'title':titles, 'links':hrefs}).to_csv(f'{data_dl_path}download_{current_time}.csv')
-
-'''
-#match files to their href?
-
-dl_files = []
-for href in hrefs:
-    p = re.search('(?<=\/)[^\/]+?(?=\.aspx)', href)
-    dl_files.append(p.group(0))
-
-'''
 
 files_dl = os.listdir(data_dl_path)
 
