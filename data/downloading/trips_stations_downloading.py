@@ -14,12 +14,12 @@ import rarfile
 import shutil
 
 
-#data_dl_path = os.path.join(os.path.dirname(__file__), 'storage')
-data_dl_path = os.getcwd()+'/data/storage/'
+data_dl_path = os.path.join(os.path.dirname(__file__), 'storage')
+#data_dl_path = os.getcwd()+'/data/downloading/storage/'
 
 
-start_date = datetime(2018, 7, 1)
-end_date = datetime(2021, 6, 30)
+start_date = datetime(2019, 1, 1)
+end_date = datetime(2022, 12, 31)
 
 date_range = list(rrule.rrule(rrule.MONTHLY, dtstart=start_date, until=end_date))
 
@@ -46,7 +46,7 @@ months = [months_translator[month] for month in months]
 
 
 options = webdriver.ChromeOptions()
-prefs = {"download.default_directory" : data_dl_path[:-1]}
+prefs = {"download.default_directory" : data_dl_path}
 options.add_experimental_option("prefs",prefs)
 
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
@@ -79,7 +79,7 @@ print(hrefs)
 print(titles)
 current_time = datetime.now().time()
 
-pd.DataFrame({'title':titles, 'links':hrefs}).to_csv(f'{data_dl_path}download_{current_time}.csv')
+pd.DataFrame({'title':titles, 'links':hrefs}).to_csv(f'download_{current_time}.csv')
 
 files_dl = os.listdir(data_dl_path)
 
@@ -94,15 +94,15 @@ def ziporrar(file):
 def unzipper(file):
     ftype = ziporrar(file)
     if ftype == 'zip':
-        with zipfile.ZipFile(data_dl_path+ file, 'r') as zip_ref:
-            zip_ref.extractall(data_dl_path + file[:-4])
-        os.remove(data_dl_path + file)
+        with zipfile.ZipFile(data_dl_path + "/" + file, 'r') as zip_ref:
+            zip_ref.extractall(data_dl_path +  "/" + file[:-4])
+        os.remove(data_dl_path + "/" + file)
 
     elif ftype == 'rar':
         try:
-            rar = rarfile.RarFile(data_dl_path + file)
+            rar = rarfile.RarFile(data_dl_path + "/" + file)
             rar.extractall(data_dl_path)
-            os.remove(data_dl_path + file)
+            os.remove(data_dl_path + "/" + file)
         except:
             print(file)
 
