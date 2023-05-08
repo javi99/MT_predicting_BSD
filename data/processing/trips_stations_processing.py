@@ -4,6 +4,13 @@ import os
 import chardet
 import numpy as np
 
+csvdata_cols_dropped = ['fecha', 'idBike', 'fleet', 
+                        'geolocation_unlock', 'address_unlock', 'locktype', 
+                        'unlocktype', 'unlock_station_name', 'lock_station_name',
+                        'geolocation_lock', 'address_lock', 'lock_date']
+
+jsondata_cols_dropped =  ['_id', 'user_day_code', 'user_type', 'ageRange', 'zip_code', 'track']
+
 
 def load_json_bad_format(path):
 
@@ -124,30 +131,6 @@ def create_stations_df(stations):
                     'month': float, 
                     'year': float, 
                     'hour': float})
-
-        if count != 0:
-            newdatasettypes = list(data.dtypes)
-            olddatasettypes = list(stations_dataset.dtypes)
-            newdatasetcolumns = list(data.columns)
-            olddatasetcolumns  = list(stations_dataset.columns)
-
-            if newdatasettypes != olddatasettypes:
-                print("Data type mismatch, check file", station)
-                print('# old:', len(olddatasettypes))
-                print('# new:', len(newdatasettypes))
-                for type in range(len(newdatasettypes)):
-                    if olddatasettypes[type] != newdatasettypes[type]:
-                        print("column old:", olddatasetcolumns[type], olddatasettypes[type])
-                        print("column new:", newdatasetcolumns[type], newdatasettypes[type] )
-            
-            if newdatasetcolumns != olddatasetcolumns:
-                print("Data type mismatch, check file", station)
-                print('# old:', len(olddatasetcolumns))
-                print('# new:', len(newdatasetcolumns))
-                for col in range(len(newdatasetcolumns)):
-                    if olddatasetcolumns[col] != newdatasetcolumns[col]:
-                        print("column old:", olddatasetcolumns[type])
-                        print("column new:", newdatasetcolumns[type])
             
         #stations_dataset = pd.concat([stations_dataset, pd.DataFrame(data)], axis=0, ignore_index=True)
         stations_dataset = data
@@ -161,43 +144,94 @@ def create_stations_df(stations):
 
     return stations_dataset
 
+def process_movement_csv(path, dtypes, keep_cols):
+    
+    csvdata = pd.read_csv(path, sep = ';')
+    csvdata.dropna(how='all', inplace = True)
+
+    csvdata = csvdata[keep_cols]
+
+    csvdata = csvdata.astype(dtypes)
+    csvdata['unlock_date']  = pd.to_datetime(csvdata['unlock_date'])
+
+    return csvdata
+
+def process_movement_json(path, dtypes, keep_cols):
+    jsondata = load_json_bad_format(path)
+    jsondata = pd.DataFrame(jsondata)
+    jsondata["_id"] = jsondata["_id"].apply(lambda id: id["$oid"])
+
+    print(jsondata)
+
+    jsondata["unplug_hourTime"] = jsondata["unplug_hourTime"].apply(lambda date: date["$date"] if date is dict else date)
+
+    trip_cols = {
+    'idplug_base': 'dock_lock',
+    'idunplug_base': 'dock_unlock',
+    'travel_time': 'trip_minutes',
+    'idplug_station': 'station_lock',
+    'idunplug_station': 'station_unlock',
+    'unplug_hourTime': 'unlock_date'
+    }
+
+    jsondata.rename(columns = trip_cols, inplace=True)
+
+    jsondata = jsondata[keep_cols]
+
+    jsondata = jsondata.astype(dtypes)
+    try:
+        jsondata['unlock_date']  = pd.to_datetime(jsondata['unlock_date'])
+    except:
+        jsondata["unlock_date"] = jsondata["unlock_date"].apply(lambda date: date["$date"])
+        jsondata['unlock_date']  = pd.to_datetime(jsondata['unlock_date'])
+
+    
+    return jsondata 
+
 
 def create_movements_df(movements):
-    movements_dataset = pd.DataFrame(columns=['_id', 
-                                              'user_day_code', 
-                                              'idplug_base', 
-                                              'track', 
-                                              'user_type', 
-                                              'idunplug_base', 
-                                              'travel_time', 
-                                              'idunplug_station', 
-                                              'ageRange', 
-                                              'idplug_station', 
-                                              'unplug_hourTime', 
-                                              'zip_code'])
+    movements_dataset = pd.DataFrame(columns=['dock_lock', 
+                                              'dock_unlock', 
+                                              'trip_minutes', 
+                                              'station_unlock', 
+                                              'station_lock', 
+                                              'unlock_date'])
+    
+    count = 0
+    df_size = 0
+
     for movement in movements:
         print(f'processing: {movement}')
         
         path = data_dl_path + movement
-        
-        data = load_json_bad_format(path)
 
-        print(len(data))
+        trip_dtypes = {
+        'dock_lock': str,
+        'dock_unlock': str,
+        'trip_minutes': float,
+        'station_unlock': str,
+        'station_lock': str,
+        }
+
+        trip_cols = ['dock_lock', 'dock_unlock', 'trip_minutes','station_lock',  'station_unlock', 'unlock_date']
         
-        movement_data = pd.DataFrame(data)
-        movement_data["_id"] = movement_data["_id"].apply(lambda id: id["$oid"])
-        #movement_data["unplug_hourTime"] = movement_data["unplug_hourTime"].apply(lambda date: date["$date"] if date is dict else date)
-        
-        for i in range(len(movement_data)):
-            if type(movement_data.loc[i, 'unplug_hourTime']) is dict:
-                print(i)
-                time = movement_data.loc[i, 'unplug_hourTime']
-                movement_data.loc[i, 'unplug_hourTime'] = time["$date"]
+        if 'csv' in path:
+            movement_data = process_movement_csv(path, trip_dtypes, trip_cols)
+        elif 'json' in path:
+            movement_data = process_movement_json(path, trip_dtypes, trip_cols)
 
         movement_data = movement_data.replace("",np.NaN)
+
+        movements_dataset = movement_data
+       
+        df_size = df_size + len(movements_dataset)
+
+        count = count + 1
         
         #movements_dataset = pd.concat([movements_dataset, pd.DataFrame(movement_data)], axis=0, ignore_index=True)
-
+    
+    print("files processed:", count)
+    print("# of rows:", df_size)
 
     return movements_dataset
 
@@ -212,16 +246,10 @@ files_dl = os.listdir(data_dl_path)
 stations = [file for file in files_dl if 'Usage' not in file and 'movements' not in file and 'trips' not in file] 
 movements = list(set(files_dl) - set(stations))
 
-stations_data = create_stations_df(stations)
+#stations_data = create_stations_df(stations)
 
-#movements_data = create_movements_df(movements[:3])
+#movements_data = create_movements_df(movements)
 
 #stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data.csv')
 
 #movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data.csv')
-
-
-
-data = pd.read_csv(data_dl_path + movements[2], on_bad_lines='skip', sep=';')
-
-data.dropna(how = 'all', inplace = True)
