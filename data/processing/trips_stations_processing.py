@@ -42,7 +42,7 @@ def add_time_data(df, time_column, extra_col_name = ""):
 def station_times(df):
 
     # create a datetime index from the year, month, day, and hour columns
-    df["_id"] = pd.to_datetime(pd.to_datetime(df["_id"]))
+    df["_id"] = pd.to_datetime(df["_id"])
     df_test = df.copy()
 
     #we set all the hours to floor. So for example, 00:23:00 will be 00:00:00
@@ -127,14 +127,13 @@ def create_stations_df(stations):
                     'latitude': str,
                     'dock_bikes': float,
                     'id_station': float,
-                    'day': float, 
-                    'month': float, 
-                    'year': float, 
+                    'day': int, 
+                    'month': int, 
+                    'year': int, 
                     'hour': float})
             
-        #stations_dataset = pd.concat([stations_dataset, pd.DataFrame(data)], axis=0, ignore_index=True)
-        stations_dataset = data
-        print(len(stations_dataset))
+        stations_dataset = pd.concat([stations_dataset, pd.DataFrame(data)], axis=0, ignore_index=True)
+        #stations_dataset = pd.DataFrame(data)
         df_size = df_size + len(stations_dataset)
 
         count = count + 1
@@ -160,10 +159,6 @@ def process_movement_json(path, dtypes, keep_cols):
     jsondata = load_json_bad_format(path)
     jsondata = pd.DataFrame(jsondata)
     jsondata["_id"] = jsondata["_id"].apply(lambda id: id["$oid"])
-
-    print(jsondata)
-
-    jsondata["unplug_hourTime"] = jsondata["unplug_hourTime"].apply(lambda date: date["$date"] if date is dict else date)
 
     trip_cols = {
     'idplug_base': 'dock_lock',
@@ -222,13 +217,13 @@ def create_movements_df(movements):
 
         movement_data = movement_data.replace("",np.NaN)
 
-        movements_dataset = movement_data
+        #movements_dataset = movement_data
        
         df_size = df_size + len(movements_dataset)
 
         count = count + 1
         
-        #movements_dataset = pd.concat([movements_dataset, pd.DataFrame(movement_data)], axis=0, ignore_index=True)
+        movements_dataset = pd.concat([movements_dataset, pd.DataFrame(movement_data)], axis=0, ignore_index=True)
     
     print("files processed:", count)
     print("# of rows:", df_size)
@@ -243,13 +238,13 @@ data_dl_path = os.getcwd()+'/data/downloading/storage/'
 
 files_dl = os.listdir(data_dl_path)
 
-stations = [file for file in files_dl if 'Usage' not in file and 'movements' not in file and 'trips' not in file] 
+stations = [file for file in files_dl if 'Usage' not in file and 'movements' not in file and 'trips' not in file and '.DS_Store' not in file] 
 movements = list(set(files_dl) - set(stations))
 
-#stations_data = create_stations_df(stations)
+stations_data = create_stations_df(stations)
 
-#movements_data = create_movements_df(movements)
+movements_data = create_movements_df(movements)
 
-#stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data.csv')
+stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data.csv')
 
-#movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data.csv')
+movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data.csv')
