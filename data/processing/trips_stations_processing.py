@@ -246,6 +246,16 @@ stations_data = create_stations_df(stations)
 
 movements_data = create_movements_df(movements)
 
+# Data Quality code based on results from Data_Quality_Assessment.ipynb
+
+# delete trips with IDs greater than 270
+movements_data = movements_data[movements_data['station_lock'] > 270]
+movements_data = movements_data[movements_data['station_unlock'] > 270]
+
+
+
+
+
 stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data.csv')
 
 movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data.csv')
