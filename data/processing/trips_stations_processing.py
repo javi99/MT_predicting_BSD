@@ -159,6 +159,7 @@ def process_movement_json(path, dtypes, keep_cols):
     jsondata = load_json_bad_format(path)
     jsondata = pd.DataFrame(jsondata)
     jsondata["_id"] = jsondata["_id"].apply(lambda id: id["$oid"])
+    jsondata['travel_time'] = jsondata['travel_time'] / 60
 
     trip_cols = {
     'idplug_base': 'dock_lock',
