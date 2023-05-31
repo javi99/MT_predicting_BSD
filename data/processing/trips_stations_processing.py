@@ -141,6 +141,8 @@ def create_stations_df(stations):
     print("files processed:", count)
     print("# of rows:", df_size)
 
+    stations_dataset['weekday'] = stations_dataset['time'].apply(lambda x: x.weekday())
+
     return stations_dataset
 
 def process_movement_csv(path, dtypes, keep_cols):
@@ -229,6 +231,13 @@ def create_movements_df(movements):
     print("files processed:", count)
     print("# of rows:", df_size)
 
+    movements_dataset['unlock_date'] = pd.to_datetime(movements_dataset['unlock_date'], format='ISO8601')
+    movements_dataset['year'] = movements_dataset['unlock_date'].apply(lambda x: x.year)
+    movements_dataset['month'] = movements_dataset['unlock_date'].apply(lambda x: x.month)
+    movements_dataset['day'] = movements_dataset['unlock_date'].apply(lambda x: x.day)
+    movements_dataset['weekday'] = movements_dataset['unlock_date'].apply(lambda x: x.weekday())
+    movements_dataset['hour'] = movements_dataset['unlock_date'].apply(lambda x: x.hour)
+
     return movements_dataset
 
 
@@ -246,6 +255,7 @@ stations_data = create_stations_df(stations)
 
 movements_data = create_movements_df(movements)
 
+
 # Data Quality code based on results from Data_Quality_Assessment.ipynb
 
 # delete trips with IDs greater than 270
@@ -253,7 +263,13 @@ movements_data = movements_data[movements_data['station_lock'] > 270]
 movements_data = movements_data[movements_data['station_unlock'] > 270]
 
 
+# fill negative trips or trips longer than 5 hours with the median for that month, weekday, and hour
 
+medians = movements_data.groupby(['month', 'weekday', 'hour'])['trip_minutes'].median().reset_index()
+medians.rename({'trip_minutes' : 'median_trip_minutes'}, axis = 1, inplace = True)
+movements_data = pd.merge(movements_data, medians, on = ['month', 'weekday', 'hour']) 
+movements_data[movements_data['trip_minutes'] < 0 ].loc[:,'trip_minutes'] = movements_data['median_trip_minutes']
+movements_data[movements_data['trip_minutes'] > 300].loc[:, 'trip_minutes'] = movements_data['median_trip_minutes']
 
 
 stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data.csv')
