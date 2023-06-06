@@ -3,6 +3,7 @@ import json
 import os
 import chardet
 import numpy as np
+import re
 
 csvdata_cols_dropped = ['fecha', 'idBike', 'fleet', 
                         'geolocation_unlock', 'address_unlock', 'locktype', 
@@ -164,8 +165,6 @@ def process_movement_json(path, dtypes, keep_cols):
     jsondata['travel_time'] = jsondata['travel_time'] / 60
 
     trip_cols = {
-    'idplug_base': 'dock_lock',
-    'idunplug_base': 'dock_unlock',
     'travel_time': 'trip_minutes',
     'idplug_station': 'station_lock',
     'idunplug_station': 'station_unlock',
@@ -188,12 +187,20 @@ def process_movement_json(path, dtypes, keep_cols):
 
 
 def create_movements_df(movements):
-    movements_dataset = pd.DataFrame(columns=['dock_lock', 
-                                              'dock_unlock', 
-                                              'trip_minutes', 
+    movements_dataset = pd.DataFrame(columns=['trip_minutes', 
                                               'station_unlock', 
                                               'station_lock', 
-                                              'unlock_date'])
+                                              'unlock_date',
+                                              'geolocation_unlock', 
+                                              'address_unlock', 
+                                              'locktype', 
+                                              'unlocktype', 
+                                              'unlock_station_name', 
+                                              'lock_station_name',
+                                              'geolocation_lock', 
+                                              'address_lock', 
+                                              'lock_date'])
+    
     
     count = 0
     df_size = 0
@@ -204,19 +211,27 @@ def create_movements_df(movements):
         path = data_dl_path + movement
 
         trip_dtypes = {
-        'dock_lock': str,
-        'dock_unlock': str,
         'trip_minutes': float,
         'station_unlock': str,
         'station_lock': str,
         }
 
-        trip_cols = ['dock_lock', 'dock_unlock', 'trip_minutes','station_lock',  'station_unlock', 'unlock_date']
+        csvtrip_cols = ['trip_minutes','station_lock',  
+                        'station_unlock', 'unlock_date', 
+                        'geolocation_unlock', 'address_unlock', 
+                        'locktype', 'unlocktype', 
+                        'unlock_station_name', 'lock_station_name',
+                        'geolocation_lock', 'address_lock', 
+                        'lock_date'
+                        ]
+        
+        jsontrip_cols = ['trip_minutes','station_lock',  
+                         'station_unlock', 'unlock_date']
         
         if 'csv' in path:
-            movement_data = process_movement_csv(path, trip_dtypes, trip_cols)
+            movement_data = process_movement_csv(path, trip_dtypes, csvtrip_cols)
         elif 'json' in path:
-            movement_data = process_movement_json(path, trip_dtypes, trip_cols)
+            movement_data = process_movement_json(path, trip_dtypes, jsontrip_cols)
 
         movement_data = movement_data.replace("",np.NaN)
 
@@ -231,12 +246,6 @@ def create_movements_df(movements):
     print("files processed:", count)
     print("# of rows:", df_size)
 
-    movements_dataset['unlock_date'] = pd.to_datetime(movements_dataset['unlock_date'], format='ISO8601')
-    movements_dataset['year'] = movements_dataset['unlock_date'].apply(lambda x: x.year)
-    movements_dataset['month'] = movements_dataset['unlock_date'].apply(lambda x: x.month)
-    movements_dataset['day'] = movements_dataset['unlock_date'].apply(lambda x: x.day)
-    movements_dataset['weekday'] = movements_dataset['unlock_date'].apply(lambda x: x.weekday())
-    movements_dataset['hour'] = movements_dataset['unlock_date'].apply(lambda x: x.hour)
 
     return movements_dataset
 
@@ -256,7 +265,66 @@ stations_data = create_stations_df(stations)
 movements_data = create_movements_df(movements)
 
 
+stations_data = pd.read_csv(os.getcwd() + '/processing/storage_final/stations_data.csv')
+
+movements_data = pd.read_csv(os.getcwd() + '/processing/storage_final/trips_data.csv')
+
+
+movements_data['unlock_date'] = pd.to_datetime(movements_data['unlock_date'], format='ISO8601')
+movements_data['year'] = movements_data['unlock_date'].apply(lambda x: x.year)
+movements_data['month'] = movements_data['unlock_date'].apply(lambda x: x.month)
+movements_data['day'] = movements_data['unlock_date'].apply(lambda x: x.day)
+movements_data['weekday'] = movements_data['unlock_date'].apply(lambda x: x.weekday())
+movements_data['hour'] = movements_data['unlock_date'].apply(lambda x: x.hour)
+
+stations_data['time'] = pd.to_datetime(stations_data['time'])
+stations_data['weekday'] = stations_data['time'].apply(lambda x: x.weekday())
+
+
+for station in range(len(movements_data['station_unlock'])):
+    try:
+        movements_data.loc[station, 'station_unlock'] = float(movements_data.loc[station, 'station_unlock'])
+    except:
+        pass
+
+
 # Data Quality code based on results from Data_Quality_Assessment.ipynb
+
+# get true id based on name for each id and see if the severity of the multiple id problem 
+
+ids = []
+
+for index in range(len(movements_data)):
+    scrape = re.findall('\d+[a-z]? -', str(movements_data.loc[index, 'lock_station_name']))
+    if scrape:
+        ids.append(scrape[0].replace('-', '').strip())
+    else:
+        ids.append(None)
+
+movements_data['scraped_station_lock'] = ids
+
+ids = []
+
+for index in range(len(movements_data)):
+    scrape = re.findall('\d+[a-z]? -', str(movements_data.loc[index, 'unlock_station_name']))
+    if scrape:
+        ids.append(scrape[0].replace('-', '').strip())
+    else:
+        ids.append(None)
+
+movements_data['scraped_station_unlock'] = ids
+
+
+# get mode scraped id by station id
+unlock_station_mode = movements_data.groupby('station_unlock')['scraped_station_unlock'].agg(lambda x: pd.Series.mode(x)[0] if not pd.Series.mode(x).empty else None).reset_index()
+lock_station_mode = movements_data.groupby('station_lock')['scraped_station_lock'].agg(lambda x: pd.Series.mode(x)[0] if not pd.Series.mode(x).empty else None).reset_index()
+
+unlock_station_mode.rename({'scraped_station_unlock':'mode_id_unlock'}, axis = 1, inplace = True)
+lock_station_mode.rename({'scraped_station_lock':'mode_id_lock'}, axis = 1, inplace = True)
+
+# merge the mode to trips dataset
+movements_data = pd.merge(movements_data, unlock_station_mode, on = 'station_unlock')
+movements_data = pd.merge(movements_data, lock_station_mode, on = 'station_lock')
 
 # delete trips with IDs greater than 270
 movements_data = movements_data[movements_data['station_lock'] > 270]
