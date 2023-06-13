@@ -264,10 +264,13 @@ stations_data = create_stations_df(stations)
 
 movements_data = create_movements_df(movements)
 
+stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data_raw.csv')
+movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data_raw.csv')
 
-stations_data = pd.read_csv(os.getcwd() + '/processing/storage_final/stations_data.csv')
 
-movements_data = pd.read_csv(os.getcwd() + '/processing/storage_final/trips_data.csv')
+stations_data = pd.read_csv(os.getcwd() + '/processing/storage_final/stations_data_raw.csv')
+
+movements_data = pd.read_csv(os.getcwd() + '/processing/storage_final/trips_data_raw.csv')
 
 
 movements_data['unlock_date'] = pd.to_datetime(movements_data['unlock_date'], format='ISO8601')
@@ -292,27 +295,27 @@ for station in range(len(movements_data['station_unlock'])):
 
 # get true id based on name for each id and see if the severity of the multiple id problem 
 
-ids = []
+lock_ids = []
 
 for index in range(len(movements_data)):
     scrape = re.findall('\d+[a-z]? -', str(movements_data.loc[index, 'lock_station_name']))
     if scrape:
-        ids.append(scrape[0].replace('-', '').strip())
+        lock_ids.append(scrape[0].replace('-', '').strip())
     else:
-        ids.append(None)
+        lock_ids.append(None)
 
-movements_data['scraped_station_lock'] = ids
+movements_data['scraped_station_lock'] = lock_ids
 
-ids = []
+unlock_ids = []
 
 for index in range(len(movements_data)):
     scrape = re.findall('\d+[a-z]? -', str(movements_data.loc[index, 'unlock_station_name']))
     if scrape:
-        ids.append(scrape[0].replace('-', '').strip())
+        unlock_ids.append(scrape[0].replace('-', '').strip())
     else:
-        ids.append(None)
+        unlock_ids.append(None)
 
-movements_data['scraped_station_unlock'] = ids
+movements_data['scraped_station_unlock'] = unlock_ids
 
 
 # get mode scraped id by station id
@@ -327,8 +330,8 @@ movements_data = pd.merge(movements_data, unlock_station_mode, on = 'station_unl
 movements_data = pd.merge(movements_data, lock_station_mode, on = 'station_lock')
 
 # delete trips with IDs greater than 270
-movements_data = movements_data[movements_data['station_lock'] > 270]
-movements_data = movements_data[movements_data['station_unlock'] > 270]
+#movements_data = movements_data[movements_data['station_lock'].isin(lock_ids)]
+#movements_data = movements_data[movements_data['station_unlock'] < 270]
 
 
 # fill negative trips or trips longer than 5 hours with the median for that month, weekday, and hour
@@ -340,6 +343,6 @@ movements_data[movements_data['trip_minutes'] < 0 ].loc[:,'trip_minutes'] = move
 movements_data[movements_data['trip_minutes'] > 300].loc[:, 'trip_minutes'] = movements_data['median_trip_minutes']
 
 
-stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data.csv')
+stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data_final.csv')
 
-movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data.csv')
+movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data_final.csv')
