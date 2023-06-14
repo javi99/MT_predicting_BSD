@@ -14,6 +14,7 @@ jsondata_cols_dropped =  ['_id', 'user_day_code', 'user_type', 'ageRange', 'zip_
 
 
 def load_json_bad_format(path):
+    '''Formats raw json input into something useable'''
 
     parsed_data = []
 
@@ -91,6 +92,11 @@ def explode_stations(df):
 
 
 def create_stations_df(stations):
+
+    '''
+    Creates main stations dataset
+    input is a list with the names of the files containing station data
+    '''
     
     stations_dataset = pd.DataFrame(columns=['activate', 'name', 'reservations_count', 'light', 'total_bases',
        'free_bases', 'number', 'longitude', 'no_available', 'address',
@@ -103,8 +109,12 @@ def create_stations_df(stations):
     for station in stations:
 
         print(f'processing: {station}')
+
+
+        # getting full path
         path = data_dl_path + station
 
+        # processing data
         data = load_json_bad_format(path)
 
         data = pd.DataFrame(data)
@@ -115,6 +125,7 @@ def create_stations_df(stations):
 
         data = add_time_data(data, "time")
 
+        # adjust datatypes
         data = data.astype({'activate': float,
                     'name': str,
                     'reservations_count': float,
@@ -133,8 +144,9 @@ def create_stations_df(stations):
                     'year': int, 
                     'hour': float})
             
+        # stack dataset to the previous one
         stations_dataset = pd.concat([stations_dataset, pd.DataFrame(data)], axis=0, ignore_index=True)
-        #stations_dataset = pd.DataFrame(data)
+
         df_size = df_size + len(stations_dataset)
 
         count = count + 1
@@ -147,6 +159,8 @@ def create_stations_df(stations):
     return stations_dataset
 
 def process_movement_csv(path, dtypes, keep_cols):
+
+    # quick clean up of the csv file
     
     csvdata = pd.read_csv(path, sep = ';')
     csvdata.dropna(how='all', inplace = True)
@@ -159,11 +173,16 @@ def process_movement_csv(path, dtypes, keep_cols):
     return csvdata
 
 def process_movement_json(path, dtypes, keep_cols):
+
+    '''handles trip data found in the json files'''
+
     jsondata = load_json_bad_format(path)
     jsondata = pd.DataFrame(jsondata)
-    jsondata["_id"] = jsondata["_id"].apply(lambda id: id["$oid"])
-    jsondata['travel_time'] = jsondata['travel_time'] / 60
+    jsondata["_id"] = jsondata["_id"].apply(lambda id: id["$oid"]) # some id values are dictionaries
+    # we have noticed that travel time in the json files is seconds so we switch to minutes to align with the csv files
+    jsondata['travel_time'] = jsondata['travel_time'] / 60 
 
+    # rename columns to match csv files
     trip_cols = {
     'travel_time': 'trip_minutes',
     'idplug_station': 'station_lock',
@@ -176,6 +195,8 @@ def process_movement_json(path, dtypes, keep_cols):
     jsondata = jsondata[keep_cols]
 
     jsondata = jsondata.astype(dtypes)
+    
+    # date is sometimes a dictionary
     try:
         jsondata['unlock_date']  = pd.to_datetime(jsondata['unlock_date'])
     except:
@@ -187,6 +208,9 @@ def process_movement_json(path, dtypes, keep_cols):
 
 
 def create_movements_df(movements):
+
+    '''stacks pandas dataframe created from the csv and json files containing trip data into one master dataframe'''
+
     movements_dataset = pd.DataFrame(columns=['trip_minutes', 
                                               'station_unlock', 
                                               'station_lock', 
@@ -206,6 +230,7 @@ def create_movements_df(movements):
     df_size = 0
 
     for movement in movements:
+
         print(f'processing: {movement}')
         
         path = data_dl_path + movement
@@ -235,8 +260,6 @@ def create_movements_df(movements):
 
         movement_data = movement_data.replace("",np.NaN)
 
-        #movements_dataset = movement_data
-       
         df_size = df_size + len(movements_dataset)
 
         count = count + 1
@@ -252,7 +275,6 @@ def create_movements_df(movements):
 
 ### Code starts here ####
 
-#data_dl_path = os.path.join(os.path.dirname(__file__), 'storage')
 data_dl_path = os.getcwd()+'/data/downloading/storage/'
 
 files_dl = os.listdir(data_dl_path)
@@ -266,83 +288,3 @@ movements_data = create_movements_df(movements)
 
 stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data_raw.csv')
 movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data_raw.csv')
-
-
-stations_data = pd.read_csv(os.getcwd() + '/processing/storage_final/stations_data_raw.csv')
-
-movements_data = pd.read_csv(os.getcwd() + '/processing/storage_final/trips_data_raw.csv')
-
-
-movements_data['unlock_date'] = pd.to_datetime(movements_data['unlock_date'], format='ISO8601')
-movements_data['year'] = movements_data['unlock_date'].apply(lambda x: x.year)
-movements_data['month'] = movements_data['unlock_date'].apply(lambda x: x.month)
-movements_data['day'] = movements_data['unlock_date'].apply(lambda x: x.day)
-movements_data['weekday'] = movements_data['unlock_date'].apply(lambda x: x.weekday())
-movements_data['hour'] = movements_data['unlock_date'].apply(lambda x: x.hour)
-
-stations_data['time'] = pd.to_datetime(stations_data['time'])
-stations_data['weekday'] = stations_data['time'].apply(lambda x: x.weekday())
-
-
-for station in range(len(movements_data['station_unlock'])):
-    try:
-        movements_data.loc[station, 'station_unlock'] = float(movements_data.loc[station, 'station_unlock'])
-    except:
-        pass
-
-
-# Data Quality code based on results from Data_Quality_Assessment.ipynb
-
-# get true id based on name for each id and see if the severity of the multiple id problem 
-
-lock_ids = []
-
-for index in range(len(movements_data)):
-    scrape = re.findall('\d+[a-z]? -', str(movements_data.loc[index, 'lock_station_name']))
-    if scrape:
-        lock_ids.append(scrape[0].replace('-', '').strip())
-    else:
-        lock_ids.append(None)
-
-movements_data['scraped_station_lock'] = lock_ids
-
-unlock_ids = []
-
-for index in range(len(movements_data)):
-    scrape = re.findall('\d+[a-z]? -', str(movements_data.loc[index, 'unlock_station_name']))
-    if scrape:
-        unlock_ids.append(scrape[0].replace('-', '').strip())
-    else:
-        unlock_ids.append(None)
-
-movements_data['scraped_station_unlock'] = unlock_ids
-
-
-# get mode scraped id by station id
-unlock_station_mode = movements_data.groupby('station_unlock')['scraped_station_unlock'].agg(lambda x: pd.Series.mode(x)[0] if not pd.Series.mode(x).empty else None).reset_index()
-lock_station_mode = movements_data.groupby('station_lock')['scraped_station_lock'].agg(lambda x: pd.Series.mode(x)[0] if not pd.Series.mode(x).empty else None).reset_index()
-
-unlock_station_mode.rename({'scraped_station_unlock':'mode_id_unlock'}, axis = 1, inplace = True)
-lock_station_mode.rename({'scraped_station_lock':'mode_id_lock'}, axis = 1, inplace = True)
-
-# merge the mode to trips dataset
-movements_data = pd.merge(movements_data, unlock_station_mode, on = 'station_unlock')
-movements_data = pd.merge(movements_data, lock_station_mode, on = 'station_lock')
-
-# delete trips with IDs greater than 270
-#movements_data = movements_data[movements_data['station_lock'].isin(lock_ids)]
-#movements_data = movements_data[movements_data['station_unlock'] < 270]
-
-
-# fill negative trips or trips longer than 5 hours with the median for that month, weekday, and hour
-
-medians = movements_data.groupby(['month', 'weekday', 'hour'])['trip_minutes'].median().reset_index()
-medians.rename({'trip_minutes' : 'median_trip_minutes'}, axis = 1, inplace = True)
-movements_data = pd.merge(movements_data, medians, on = ['month', 'weekday', 'hour']) 
-movements_data[movements_data['trip_minutes'] < 0 ].loc[:,'trip_minutes'] = movements_data['median_trip_minutes']
-movements_data[movements_data['trip_minutes'] > 300].loc[:, 'trip_minutes'] = movements_data['median_trip_minutes']
-
-
-stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data_final.csv')
-
-movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data_final.csv')
