@@ -3,6 +3,7 @@ import json
 import os
 import chardet
 import numpy as np
+import re
 
 csvdata_cols_dropped = ['fecha', 'idBike', 'fleet', 
                         'geolocation_unlock', 'address_unlock', 'locktype', 
@@ -13,6 +14,7 @@ jsondata_cols_dropped =  ['_id', 'user_day_code', 'user_type', 'ageRange', 'zip_
 
 
 def load_json_bad_format(path):
+    '''Formats raw json input into something useable'''
 
     parsed_data = []
 
@@ -42,7 +44,7 @@ def add_time_data(df, time_column, extra_col_name = ""):
 def station_times(df):
 
     # create a datetime index from the year, month, day, and hour columns
-    df["_id"] = pd.to_datetime(pd.to_datetime(df["_id"]))
+    df["_id"] = pd.to_datetime(df["_id"])
     df_test = df.copy()
 
     #we set all the hours to floor. So for example, 00:23:00 will be 00:00:00
@@ -90,6 +92,11 @@ def explode_stations(df):
 
 
 def create_stations_df(stations):
+
+    '''
+    Creates main stations dataset
+    input is a list with the names of the files containing station data
+    '''
     
     stations_dataset = pd.DataFrame(columns=['activate', 'name', 'reservations_count', 'light', 'total_bases',
        'free_bases', 'number', 'longitude', 'no_available', 'address',
@@ -102,8 +109,12 @@ def create_stations_df(stations):
     for station in stations:
 
         print(f'processing: {station}')
+
+
+        # getting full path
         path = data_dl_path + station
 
+        # processing data
         data = load_json_bad_format(path)
 
         data = pd.DataFrame(data)
@@ -114,6 +125,7 @@ def create_stations_df(stations):
 
         data = add_time_data(data, "time")
 
+        # adjust datatypes
         data = data.astype({'activate': float,
                     'name': str,
                     'reservations_count': float,
@@ -127,14 +139,14 @@ def create_stations_df(stations):
                     'latitude': str,
                     'dock_bikes': float,
                     'id_station': float,
-                    'day': float, 
-                    'month': float, 
-                    'year': float, 
+                    'day': int, 
+                    'month': int, 
+                    'year': int, 
                     'hour': float})
             
-        #stations_dataset = pd.concat([stations_dataset, pd.DataFrame(data)], axis=0, ignore_index=True)
-        stations_dataset = data
-        print(len(stations_dataset))
+        # stack dataset to the previous one
+        stations_dataset = pd.concat([stations_dataset, pd.DataFrame(data)], axis=0, ignore_index=True)
+
         df_size = df_size + len(stations_dataset)
 
         count = count + 1
@@ -142,9 +154,13 @@ def create_stations_df(stations):
     print("files processed:", count)
     print("# of rows:", df_size)
 
+    stations_dataset['weekday'] = stations_dataset['time'].apply(lambda x: x.weekday())
+
     return stations_dataset
 
 def process_movement_csv(path, dtypes, keep_cols):
+
+    # quick clean up of the csv file
     
     csvdata = pd.read_csv(path, sep = ';')
     csvdata.dropna(how='all', inplace = True)
@@ -157,17 +173,17 @@ def process_movement_csv(path, dtypes, keep_cols):
     return csvdata
 
 def process_movement_json(path, dtypes, keep_cols):
+
+    '''handles trip data found in the json files'''
+
     jsondata = load_json_bad_format(path)
     jsondata = pd.DataFrame(jsondata)
-    jsondata["_id"] = jsondata["_id"].apply(lambda id: id["$oid"])
+    jsondata["_id"] = jsondata["_id"].apply(lambda id: id["$oid"]) # some id values are dictionaries
+    # we have noticed that travel time in the json files is seconds so we switch to minutes to align with the csv files
+    jsondata['travel_time'] = jsondata['travel_time'] / 60 
 
-    print(jsondata)
-
-    jsondata["unplug_hourTime"] = jsondata["unplug_hourTime"].apply(lambda date: date["$date"] if date is dict else date)
-
+    # rename columns to match csv files
     trip_cols = {
-    'idplug_base': 'dock_lock',
-    'idunplug_base': 'dock_unlock',
     'travel_time': 'trip_minutes',
     'idplug_station': 'station_lock',
     'idunplug_station': 'station_unlock',
@@ -179,6 +195,8 @@ def process_movement_json(path, dtypes, keep_cols):
     jsondata = jsondata[keep_cols]
 
     jsondata = jsondata.astype(dtypes)
+    
+    # date is sometimes a dictionary
     try:
         jsondata['unlock_date']  = pd.to_datetime(jsondata['unlock_date'])
     except:
@@ -190,66 +208,83 @@ def process_movement_json(path, dtypes, keep_cols):
 
 
 def create_movements_df(movements):
-    movements_dataset = pd.DataFrame(columns=['dock_lock', 
-                                              'dock_unlock', 
-                                              'trip_minutes', 
+
+    '''stacks pandas dataframe created from the csv and json files containing trip data into one master dataframe'''
+
+    movements_dataset = pd.DataFrame(columns=['trip_minutes', 
                                               'station_unlock', 
                                               'station_lock', 
-                                              'unlock_date'])
+                                              'unlock_date',
+                                              'geolocation_unlock', 
+                                              'address_unlock', 
+                                              'locktype', 
+                                              'unlocktype', 
+                                              'unlock_station_name', 
+                                              'lock_station_name',
+                                              'geolocation_lock', 
+                                              'address_lock', 
+                                              'lock_date'])
+    
     
     count = 0
     df_size = 0
 
     for movement in movements:
+
         print(f'processing: {movement}')
         
         path = data_dl_path + movement
 
         trip_dtypes = {
-        'dock_lock': str,
-        'dock_unlock': str,
         'trip_minutes': float,
         'station_unlock': str,
         'station_lock': str,
         }
 
-        trip_cols = ['dock_lock', 'dock_unlock', 'trip_minutes','station_lock',  'station_unlock', 'unlock_date']
+        csvtrip_cols = ['trip_minutes','station_lock',  
+                        'station_unlock', 'unlock_date', 
+                        'geolocation_unlock', 'address_unlock', 
+                        'locktype', 'unlocktype', 
+                        'unlock_station_name', 'lock_station_name',
+                        'geolocation_lock', 'address_lock', 
+                        'lock_date'
+                        ]
+        
+        jsontrip_cols = ['trip_minutes','station_lock',  
+                         'station_unlock', 'unlock_date']
         
         if 'csv' in path:
-            movement_data = process_movement_csv(path, trip_dtypes, trip_cols)
+            movement_data = process_movement_csv(path, trip_dtypes, csvtrip_cols)
         elif 'json' in path:
-            movement_data = process_movement_json(path, trip_dtypes, trip_cols)
+            movement_data = process_movement_json(path, trip_dtypes, jsontrip_cols)
 
         movement_data = movement_data.replace("",np.NaN)
 
-        movements_dataset = movement_data
-       
         df_size = df_size + len(movements_dataset)
 
         count = count + 1
         
-        #movements_dataset = pd.concat([movements_dataset, pd.DataFrame(movement_data)], axis=0, ignore_index=True)
+        movements_dataset = pd.concat([movements_dataset, pd.DataFrame(movement_data)], axis=0, ignore_index=True)
     
     print("files processed:", count)
     print("# of rows:", df_size)
+
 
     return movements_dataset
 
 
 ### Code starts here ####
 
-#data_dl_path = os.path.join(os.path.dirname(__file__), 'storage')
 data_dl_path = os.getcwd()+'/data/downloading/storage/'
 
 files_dl = os.listdir(data_dl_path)
 
-stations = [file for file in files_dl if 'Usage' not in file and 'movements' not in file and 'trips' not in file] 
+stations = [file for file in files_dl if 'Usage' not in file and 'movements' not in file and 'trips' not in file and '.DS_Store' not in file] 
 movements = list(set(files_dl) - set(stations))
 
-#stations_data = create_stations_df(stations)
+stations_data = create_stations_df(stations)
 
-#movements_data = create_movements_df(movements)
+movements_data = create_movements_df(movements)
 
-#stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data.csv')
-
-#movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data.csv')
+stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data_raw.csv')
+movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data_raw.csv')
