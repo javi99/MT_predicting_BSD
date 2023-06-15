@@ -23,7 +23,7 @@ hist_stations_folder = os.path.join(data_folder,
 
 # this file should be the definitive merged file between stations and trips. This will be used only
 # to test the code
-hist_bike_stations = "202105_merged_trips_stations.csv"
+hist_bike_stations = "../storage/intermediate/station_plugs_coord_correct.csv"
 
 days_per_month = {
     1:31,
@@ -105,15 +105,14 @@ def complete_weather_dataframe(folder):
 weather_stations_info_df = basic_df_load_and_clean(data_folder, 
                                                    general_weather_file, 
                                                    sep = ";")
-hist_stations_df = basic_df_load_and_clean(hist_stations_folder, 
-                                           hist_bike_stations)
+hist_stations_df = pd.read_csv(hist_bike_stations)
 
 hist_weather_df = complete_weather_dataframe(hist_weather_folder)
 
 # From historical bike stations information we will want a subset of the dataframe with only 1 row per station, 
 # and only the columns id, longitude and magnitude so that we can relate bike stations with weather stations
-bs_df = hist_stations_df.groupby("id_station").first().reset_index()[["id_station", "longitude", "latitude"]]
-bs_df.columns = ["id_station", "longitud", "latitud"]
+bs_df = hist_stations_df.groupby("number").first().reset_index()[["number", "longitude", "latitude"]]
+bs_df.columns = ["number", "longitud", "latitud"]
 
 print("LOADING: DONE")
 ### 2- CLEANING HIST WEATHER DATA ###
@@ -154,9 +153,9 @@ MAGNITUDES = [81, 82, 83, 86, 87, 88, 89]
 
 # from bike stations, we get a list of 1 row per
 # station with only id, latitude and longitude
-bs_df = hist_stations_df.groupby("id_station").first().reset_index()
-bs_df = bs_df[["id_station", "longitude", "latitude"]]
-bs_df.columns = ["id_station", "longitud", "latitud"]
+bs_df = hist_stations_df.groupby("number").first().reset_index()
+bs_df = bs_df[["number", "longitude", "latitude"]]
+bs_df.columns = ["number", "longitud", "latitud"]
 
 ### 2.1 - Assigning weather station to bike stations for each magnitude ###
 # adding for each magnitude the nearest weather station to each bike station per year per month
@@ -164,11 +163,11 @@ print("________________________________")
 print("Building relation between weather stations per and bike stations...")
 classifier = NearestCentroid()
 
-bs_df = bs_df.sort_values("id_station")
+bs_df = bs_df.sort_values("number")
 # we have a df of per each month of each year and each mangitude, which stations register the whole month.
 # lets assign to those stations the nearest bike station at each moment in time.
 coord_bs = bs_df[["latitud", "longitud"]]
-relate_ws_bs = pd.DataFrame(columns=["bike_station","longitud","latitud", "ANO", "MES","MAGNITUD", "weather_station"])
+relate_ws_bs = pd.DataFrame(columns=["number","longitud","latitud", "ANO", "MES","MAGNITUD", "weather_station"])
 
 for year in range(2019,2024):
     for month in range(1,13):
@@ -201,15 +200,15 @@ for year in range(2019,2024):
             # will have a bike stations BUT all bike stations will have a weather station
             merg = pd.merge(ws_df_magnitude[["ANO", "MES","MAGNITUD", "ESTACION"]],bs_df, on="ESTACION", how="left")
             # we filter through the weather stations that HAVE a bike station
-            merg = merg.loc[~merg["id_station"].isna(), ["id_station","longitud","latitud", "ANO", "MES","MAGNITUD", "ESTACION"]]
+            merg = merg.loc[~merg["number"].isna(), ["number","longitud","latitud", "ANO", "MES","MAGNITUD", "ESTACION"]]
             
-            merg.columns = ["bike_station","longitud","latitud", "ANO", "MES","MAGNITUD", "weather_station"]
+            merg.columns = ["number","longitud","latitud", "ANO", "MES","MAGNITUD", "weather_station"]
             # we put all the information into a final dataframe
             relate_ws_bs = pd.concat([relate_ws_bs, merg])
 
 
-relate_ws_bs = relate_ws_bs.pivot(index=['ANO', 'MES', 'bike_station',"longitud","latitud"], columns='MAGNITUD', values='weather_station').reset_index()
-relate_ws_bs.columns = ['ANO', 'MES', 'bike_station',"longitud","latitud", 'weather_station_81', 'weather_station_82', 
+relate_ws_bs = relate_ws_bs.pivot(index=['ANO', 'MES', 'number',"longitud","latitud"], columns='MAGNITUD', values='weather_station').reset_index()
+relate_ws_bs.columns = ['ANO', 'MES', 'number',"longitud","latitud", 'weather_station_81', 'weather_station_82', 
                   'weather_station_83', 'weather_station_86', 'weather_station_87', 'weather_station_88',
                   'weather_station_89']
 
@@ -223,14 +222,14 @@ melted_df = pd.melt(hist_weather_df_filtered, id_vars=['ESTACION', 'MAGNITUD', '
 
 
 hist_weather = pd.DataFrame(columns=melted_df.columns)
-hist_weather.insert(0, "bike_station", None)
+hist_weather.insert(0, "number", None)
 
 print("Building historical dataframe...")
 
 for year in range(2019,2024):
 
     aux_year = pd.DataFrame(columns=melted_df.columns)
-    aux_year.insert(0, "bike_station", None)
+    aux_year.insert(0, "number", None)
 
     for month in range(1,13):
         print(f"Building historical: year {year}, month {month}")
@@ -238,7 +237,7 @@ for year in range(2019,2024):
             break
 
         aux_month = pd.DataFrame(columns=melted_df.columns)
-        aux_month.insert(0, "bike_station", None)
+        aux_month.insert(0, "number", None)
         
         for magnitude in MAGNITUDES:
             bs_df_column = "weather_station_" + str(magnitude)
@@ -250,7 +249,7 @@ for year in range(2019,2024):
                                              (melted_df["MAGNITUD"]==magnitude)&
                                              (melted_df["ESTACION"].isin(magnitude_stations))]
             # we subset the bike stations information df so that we only merge the current magnitude to the hist weather df
-            bs_df_magnitude = relate_ws_bs.loc[(relate_ws_bs["ANO"]==year) & (relate_ws_bs["MES"]==month),["bike_station", bs_df_column]]
+            bs_df_magnitude = relate_ws_bs.loc[(relate_ws_bs["ANO"]==year) & (relate_ws_bs["MES"]==month),["number", bs_df_column]]
             
             # we merge the weather station to each bike station for each moment in time and for each magnitude, as depending
             # on this information each bike station will get the information from one weather station or another
@@ -263,10 +262,12 @@ for year in range(2019,2024):
     
     hist_weather = pd.concat([hist_weather, aux_year])
 
-print(hist_weather)
-
-hist_weather = hist_weather.pivot_table(index=['bike_station', 'ANO', 'MES', 'DIA', 'HORA'], columns='MAGNITUD', values='CANTIDAD').reset_index()
+hist_weather = hist_weather.pivot_table(index=['number', 'ANO', 'MES', 'DIA', 'HORA'], columns='MAGNITUD', values='CANTIDAD').reset_index()
 hist_weather["HORA"] = hist_weather["HORA"].apply(parse_hour)
+#we want all number values to be strings
+hist_weather["number"] = hist_weather["number"].map(str)
+
+print(hist_weather.head())
 
 print("SAVING FINAL WEATHER DATAFRAME")
 hist_weather.to_csv(os.path.join(destination_folder, "weather_final.csv"), index=False)
