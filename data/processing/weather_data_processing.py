@@ -23,7 +23,7 @@ hist_stations_folder = os.path.join(data_folder,
 
 # this file should be the definitive merged file between stations and trips. This will be used only
 # to test the code
-hist_bike_stations = "../storage/intermediate/station_plugs_coord_correct.csv"
+hist_bike_stations = "../storage/intermediate/station_plugs.csv"
 
 days_per_month = {
     1:31,
@@ -266,7 +266,7 @@ hist_weather = hist_weather.pivot_table(index=['number', 'ANO', 'MES', 'DIA', 'H
 hist_weather["HORA"] = hist_weather["HORA"].apply(parse_hour)
 #we want all number values to be strings
 hist_weather["number"] = hist_weather["number"].map(str)
-
+hist_weather.columns = ["number", "year", "month", "day", "hour", 81, 82, 83, 86, 87, 88, 89]
 print(hist_weather.head())
 
 print("SAVING FINAL WEATHER DATAFRAME")
