@@ -19,11 +19,7 @@ stations_data['time'] = pd.to_datetime(stations_data['time'])
 stations_data['weekday'] = stations_data['time'].apply(lambda x: x.weekday())
 
 
-for station in range(len(movements_data['station_unlock'])):
-    try:
-        movements_data.loc[station, 'station_unlock'] = float(movements_data.loc[station, 'station_unlock'])
-    except:
-        pass
+movements_data['station_unlock'] = movements_data['station_unlock'].map(str)
 
 
 # Data Quality code based on results from Data_Quality_Assessment.ipynb
