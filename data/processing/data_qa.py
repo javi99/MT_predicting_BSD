@@ -2,21 +2,30 @@ import pandas as pd
 import os
 import re
 
+print("Loading data...")
 stations_data = pd.read_csv(os.getcwd() + '/processing/storage_final/stations_data_raw.csv')
-
 movements_data = pd.read_csv(os.getcwd() + '/processing/storage_final/trips_data_raw.csv')
+print("Data loaded")
+print("________________")
 
 # adjust data types
+print("Adjusting data types...")
+stations_data['time'] = pd.to_datetime(stations_data['time'])
+print("Time in stations data adjusted")
+stations_data['weekday'] = stations_data['time'].apply(lambda x: x.weekday())
+print("Weekday added in stations data")
 
 movements_data['unlock_date'] = pd.to_datetime(movements_data['unlock_date'], format='ISO8601')
 movements_data['year'] = movements_data['unlock_date'].apply(lambda x: x.year)
+print("Years in movements data adjusted")
 movements_data['month'] = movements_data['unlock_date'].apply(lambda x: x.month)
+print("Months in movements data adjusted")
 movements_data['day'] = movements_data['unlock_date'].apply(lambda x: x.day)
+print("Days in movements data adjusted")
 movements_data['weekday'] = movements_data['unlock_date'].apply(lambda x: x.weekday())
+print("Weekday added in movements data")
 movements_data['hour'] = movements_data['unlock_date'].apply(lambda x: x.hour)
-
-stations_data['time'] = pd.to_datetime(stations_data['time'])
-stations_data['weekday'] = stations_data['time'].apply(lambda x: x.weekday())
+print("Hours in movements data adjusted")
 
 
 for station in range(len(movements_data['station_unlock'])):
@@ -25,10 +34,15 @@ for station in range(len(movements_data['station_unlock'])):
     except:
         pass
 
+print("station_unlock in movements data adjusted")
 
+print("Data types adjusted")
+print("________________")
 # Data Quality code based on results from Data_Quality_Assessment.ipynb
 
 ## get number based on name for each id
+print("Fixing numbers...")
+
 
 lock_ids = []
 
@@ -64,7 +78,10 @@ lock_station_mode.rename({'scraped_station_lock':'mode_id_lock'}, axis = 1, inpl
 movements_data = pd.merge(movements_data, unlock_station_mode, on = 'station_unlock')
 movements_data = pd.merge(movements_data, lock_station_mode, on = 'station_lock')
 
+print("Numbers fixed")
+print("________________")
 
+print("Inputing outliers of travel time...")
 # fill negative trips or trips longer than 5 hours with the median for that month, weekday, and hour
 
 medians = movements_data.groupby(['month', 'weekday', 'hour'])['trip_minutes'].median().reset_index()
@@ -73,7 +90,10 @@ movements_data = pd.merge(movements_data, medians, on = ['month', 'weekday', 'ho
 movements_data[movements_data['trip_minutes'] < 0 ].loc[:,'trip_minutes'] = movements_data['median_trip_minutes']
 movements_data[movements_data['trip_minutes'] > 300].loc[:, 'trip_minutes'] = movements_data['median_trip_minutes']
 
-
+print("Outliers of travel time inputed")
+print("________________")
 # saving cleaned files
+print("Saving files...")
 stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data_final.csv')
 movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data_final.csv')
+print("Files saved")

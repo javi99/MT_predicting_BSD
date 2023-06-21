@@ -102,6 +102,7 @@ def complete_weather_dataframe(folder):
 
 ### 1- LOADING DATA ###
 # here we will need to put together the weather data
+print("Loading data...")
 weather_stations_info_df = basic_df_load_and_clean(data_folder, 
                                                    general_weather_file, 
                                                    sep = ";")
@@ -114,9 +115,10 @@ hist_weather_df = complete_weather_dataframe(hist_weather_folder)
 bs_df = hist_stations_df.groupby("number").first().reset_index()[["number", "longitude", "latitude"]]
 bs_df.columns = ["number", "longitud", "latitud"]
 
-print("LOADING: DONE")
+print("Data loaded")
+print("______________")
 ### 2- CLEANING HIST WEATHER DATA ###
-
+print("Cleaning hist weather data...")
 # 1st problem: some stations doesnt have all days registered
 # in all months. Example: in a month of 31 days, station 108 had
 # only 30 days registered.
@@ -126,7 +128,6 @@ print("LOADING: DONE")
 # general info file but do not exist in the historical registering.
 
 # we ensure we are only working with the stations that are gathering data at any time
-print("________________________________")
 
 # we get the number of days registered per station per magnitude per year per month
 df_stations_registers = hist_weather_df[["ESTACION","MAGNITUD","ANO","MES", "DIA"]].groupby(["ESTACION","MAGNITUD","ANO","MES"]).count().reset_index()
@@ -143,12 +144,13 @@ hist_weather_df_filtered = pd.merge(df_stations_registers_filtered,hist_weather_
 # we add the latitude and longitude to all weather stations in ws_df_filtered
 weather_stations_info_df_filtered=pd.merge(df_stations_registers_filtered, weather_stations_info_df[["codigo_corto","longitud", "latitud"]], left_on="ESTACION", right_on="codigo_corto")
 
-print("CLEANING: DONE")
+print("Hist weather data cleaned.")
+print("______________")
 
 MAGNITUDES = [81, 82, 83, 86, 87, 88, 89]
 
 ### 2- MERGING MECHANISM ###
-
+print("Building relation between weather stations and bike stations...")
 # 1st: Assigning weather station to bike stations for each magnitude
 
 # from bike stations, we get a list of 1 row per
@@ -159,8 +161,6 @@ bs_df.columns = ["number", "longitud", "latitud"]
 
 ### 2.1 - Assigning weather station to bike stations for each magnitude ###
 # adding for each magnitude the nearest weather station to each bike station per year per month
-print("________________________________")
-print("Building relation between weather stations per and bike stations...")
 classifier = NearestCentroid()
 
 bs_df = bs_df.sort_values("number")
@@ -211,10 +211,12 @@ relate_ws_bs = relate_ws_bs.pivot(index=['ANO', 'MES', 'number',"longitud","lati
 relate_ws_bs.columns = ['ANO', 'MES', 'number',"longitud","latitud", 'weather_station_81', 'weather_station_82', 
                   'weather_station_83', 'weather_station_86', 'weather_station_87', 'weather_station_88',
                   'weather_station_89']
+print("Relation between weather stations and bike stations built")
+print("______________")
 
 ### 3- PROCESSING WEATHER DATA ###
-print("________________________________")
-print("Starting processing of weather data")
+print("Processing weather data...")
+
 
 melted_df = pd.melt(hist_weather_df_filtered, id_vars=['ESTACION', 'MAGNITUD', 'PUNTO_MUESTREO', 'ANO', 'MES', 'DIA'],
                         value_vars=['H{:02d}'.format(hour) for hour in range(1, 25)],
@@ -224,6 +226,8 @@ melted_df = pd.melt(hist_weather_df_filtered, id_vars=['ESTACION', 'MAGNITUD', '
 hist_weather = pd.DataFrame(columns=melted_df.columns)
 hist_weather.insert(0, "number", None)
 
+print("Weather data processed")
+print("______________")
 print("Building historical dataframe...")
 
 for year in range(2019,2024):
@@ -262,12 +266,18 @@ for year in range(2019,2024):
     
     hist_weather = pd.concat([hist_weather, aux_year])
 
+print("Historical dataframe built")
+print("______________")
+print("Applying final details to data...")
+
 hist_weather = hist_weather.pivot_table(index=['number', 'ANO', 'MES', 'DIA', 'HORA'], columns='MAGNITUD', values='CANTIDAD').reset_index()
 hist_weather["HORA"] = hist_weather["HORA"].apply(parse_hour)
 #we want all number values to be strings
 hist_weather["number"] = hist_weather["number"].map(str)
 hist_weather.columns = ["number", "year", "month", "day", "hour", 81, 82, 83, 86, 87, 88, 89]
 print(hist_weather.head())
-
-print("SAVING FINAL WEATHER DATAFRAME")
+print("Final details applied")
+print("______________")
+print("Saving weather_final.csv dataframe...")
 hist_weather.to_csv(os.path.join(destination_folder, "weather_final.csv"), index=False)
+print("weather_final.csv dataframe saved")
