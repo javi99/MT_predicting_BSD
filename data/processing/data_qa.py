@@ -28,11 +28,7 @@ movements_data['hour'] = movements_data['unlock_date'].apply(lambda x: x.hour)
 print("Hours in movements data adjusted")
 
 
-for station in range(len(movements_data['station_unlock'])):
-    try:
-        movements_data.loc[station, 'station_unlock'] = float(movements_data.loc[station, 'station_unlock'])
-    except:
-        pass
+movements_data['station_unlock'] = movements_data['station_unlock'].map(str)
 
 print("station_unlock in movements data adjusted")
 
