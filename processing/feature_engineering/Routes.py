@@ -80,7 +80,7 @@ for origin in range(len(stations)):
         else:
             print(data['status'])
         
-        #time.sleep(30)
+        time.sleep(60)
 
 meters_distance_matrix.to_csv("meters_distance_matrix_walking.csv", index=False)
 time_distance_matrix.to_csv("time_distance_matrix_walking.csv", index=False)
