@@ -15,65 +15,74 @@ def divide_chunks(l, n):
         yield l[i:i + n]
 
 # get data
-data_dl_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '/storage_final/')
+#data_dl_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '/storage_final/')
 
-data_dl_path = '/Users/erikagutierrez/Documents/BSE/Term_3/Masters_Thesis/MT_predicting_BSD/processing/storage_final/'
+data_dl_path = '/Users/javier/Desktop/TFM/MT_predicting_BSD/modelling/developing/'
 
-ids = pd.read_csv(data_dl_path + 'bases_bicimad_mod.csv', sep = ';')
+ids = pd.read_csv(data_dl_path + 'numbers_with_coordinates_and_indices.csv', sep = ',')
+
+window = 10
+#we order the coordinates in terms of the index column, so that later on in the matrix we can identify
+#each distance with the corresponding stations
+ids = ids.sort_values("index")
 
 # create empty matrices
-time_distance_matrix = pd.DataFrame(columns = list(ids['Número'].unique()), index=list(ids['Número'].unique()))
-meters_distance_matrix = pd.DataFrame(columns = list(ids['Número'].unique()), index = list(ids['Número'].unique()))
+time_distance_matrix = pd.DataFrame(columns = list(ids['index'].unique()), index=list(ids['index'].unique()))
+meters_distance_matrix = pd.DataFrame(columns = list(ids['index'].unique()), index = list(ids['index'].unique()))
 
 # make list of coordinate pairs
 
-stations = [str(ids.loc[i, 'Latitud'])+','+str(ids.loc[i, 'Longitud']) for i in range(len(ids))]
-
-stations = list(divide_chunks(stations, 10)) # create mini lists of 10 elements each
-
+#stations has the same order as ids
+stations = [str(ids.loc[i, 'latitude'])+','+str(ids.loc[i, 'longitude']) for i in range(len(ids))]
+stations = list(divide_chunks(stations, window)) # create mini lists of 10 elements each
 
 # Google Maps API endpoint URL
 url = "https://maps.googleapis.com/maps/api/distancematrix/json"
 
 
-partition_end = 10
-partition_start = 0
-col = 0
+for origin in range(len(stations)):
+    print(f"iteration {origin+1} of {len(stations)} iterations")
 
+    partition_start_origin = origin*window
+    partition_end_origin = partition_start_origin+window
+    if partition_end_origin > len(ids):
+        partition_end_origin = len(ids)
+        
+    origins = stations[origin]
 
-for origin in stations:
+    for destination in range(len(stations)):
+        partition_start_dest = destination*window
+        partition_end_dest = partition_start_dest+window
+        if partition_end_dest > len(ids):
+            partition_end_dest = len(ids)
+        
+        destinations = stations[destination]
 
-    time.sleep(60)
-    
-    for destination in stations:
         # Parameters for the request
         params = {
-        "origins": "|".join(origin),
-        "destinations": "|".join(destination),
-        "key": "{google_api_key}",
-        "mode":"bicycling" }
+        "origins": "|".join(origins),
+        "destinations": "|".join(destinations),
+        "key": f"{google_api_key}",
+        "mode":"walking" }
 
         # Send GET request to the API
         response = requests.get(url, params=params)
-
+        
         # Parse the JSON response
         data = json.loads(response.text)    
+        if data['status'] == 'OK':  
 
-        if data['status'] == 'OK':
-            
-            
-            for x in range(len(data['rows'])):
+            for origin_processed in range(len(data['rows'])):
 
-                time_distance_matrix.iloc[partition_start:partition_end, col + x] = [y['duration']['value'] for y in data['rows'][x]['elements']] # seconds
-                meters_distance_matrix.iloc[partition_start:partition_end, col + x] = [y['distance']['value'] for y in data['rows'][x]['elements']] # meters
-                
-            
-            partition_end = partition_end + 10
-            partition_start = partition_start + 10
+                time_distance_matrix.iloc[partition_start_origin+origin_processed, partition_start_dest:partition_end_dest] = [y['duration']['value'] for y in data['rows'][origin_processed]['elements']] # seconds
+                meters_distance_matrix.iloc[partition_start_origin+origin_processed, partition_start_dest:partition_end_dest] = [y['distance']['value'] for y in data['rows'][origin_processed]['elements']] # meters
 
         else:
             print(data['status'])
-    
-    col = col + 1
+        
+        #time.sleep(30)
+
+meters_distance_matrix.to_csv("meters_distance_matrix_walking.csv", index=False)
+time_distance_matrix.to_csv("time_distance_matrix_walking.csv", index=False)
 
    
