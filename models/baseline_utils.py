@@ -3,14 +3,15 @@ from sklearn.model_selection import GridSearchCV
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import copy
+from sklearn.model_selection import train_test_split
 
 
-class baseline_model():
+class baseline_model:
 
 
-    def create_modeling_datasets(self, dataset, timeperiods):
+    def create_modeling_datasets(self, dataset, timeperiods, validation_size):
     # timeperiod is a list of datetime date tuples: (start_date, end_date)
 
         data = copy.deepcopy(dataset)
@@ -20,7 +21,12 @@ class baseline_model():
         for timeperiod in timeperiods:
             test = data[(data['time'] >= timeperiod[0]) & (data['time'] <= timeperiod[1])]
             train = data[(data['time'] < timeperiod[0]) | (data['time'] > timeperiod[1])]
-            train_test_sets.append([train, test])
+            train, validation = train_test_split(train, test_size=validation_size, random_state=55)
+            train.sort_values('time', inplace = True)
+            validation.sort_values('time', inplace = True)
+            test.sort_values('time', inplace = True)
+
+            train_test_sets.append([train, validation, test])
     
         return train_test_sets            
                     
@@ -36,13 +42,13 @@ class baseline_model():
             return model
                                     
 
-    def evaluate_metrics(self, target_true, target_predictions, model):
+    def evaluate_metrics(self, target_true, target_predictions, model, target):
         
         rmse = np.sqrt(mean_squared_error(target_true, target_predictions))
         mae = mean_absolute_error(target_true, target_predictions)
         r2 = r2_score(target_true, target_predictions)
                         
-        results_list = [model, rmse, mae, r2]
+        results_list = [model, target, rmse, mae, r2]
 
         return results_list
                         
@@ -61,15 +67,21 @@ class baseline_model():
         plt.show()
 
 
-    def create_feature_datasets(self, datasets, features):
+    def create_feature_datasets(self, datasets, features, scaler_type):
         # datasets is a lists of lists:  [train dataframe, test dataframe]
         feature_datasets = copy.deepcopy(datasets)
-        scaler = StandardScaler()
+        if scaler_type == 'standard':
+            scaler = StandardScaler()
+        if scaler_type == 'minmax':
+            scaler = MinMaxScaler()
+
         for dataset in feature_datasets:
             dataset[0] = dataset[0][features]
             dataset[1] = dataset[1][features]
+            dataset[2]  = dataset[2][features]
             dataset[0] = pd.DataFrame(scaler.fit_transform(dataset[0]), columns = features)
             dataset[1] = pd.DataFrame(scaler.transform(dataset[1]), columns = features)
+            dataset[2] = pd.DataFrame(scaler.transform(dataset[2]), columns = features)
         
         return feature_datasets
     
@@ -80,6 +92,7 @@ class baseline_model():
         for dataset in target_datasets:
             dataset[0] = dataset[0][target]
             dataset[1] = dataset[1][target]
+            dataset[2] = dataset[2][target]        
         
         return target_datasets
         
