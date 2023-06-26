@@ -107,7 +107,8 @@ for n in range(len(datasets)):
     results.append(baseline.evaluate_metrics(plug_target_datasets[n][2], plug_preds, 'XGBOOST', 'Plugs'))
     results.append(baseline.evaluate_metrics(unplug_target_datasets[n][2], unplug_preds, 'XGBOOST', 'Unplugs'))
 
-    pd.DataFrame(results, columns = ['Model Name', 'Target Feature','RSME', 'MAE', 'R2'])
+    results_df = pd.DataFrame(results, columns = ['Model Name', 'Target Feature','RSME', 'MAE', 'R2'])
+    print(results_df)
 
 # compute feature importances
 

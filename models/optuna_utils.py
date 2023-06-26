@@ -35,7 +35,7 @@ class Optuna:
             # L1 regularization weight.
             "alpha": trial.suggest_float("alpha", 1e-8, 1.0, log=True),
             # sampling ratio for training data.
-            #"subsample": trial.suggest_float("subsample", 0.2, 1.0),
+            "subsample": trial.suggest_float("subsample", 0.2, 1.0),
             # sampling according to each tree.
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.2, 1.0),
         }
@@ -49,6 +49,7 @@ class Optuna:
             # defines how selective algorithm is.
             param["gamma"] = trial.suggest_float("gamma", 1e-8, 1.0, log=True)
             param["grow_policy"] = trial.suggest_categorical("grow_policy", ["depthwise", "lossguide"])
+            param["max_leaves"] = trial.suggest_int("max_leaves", 0, 9)
 
         if param["booster"] == "dart":
             param["sample_type"] = trial.suggest_categorical("sample_type", ["uniform", "weighted"])
@@ -61,14 +62,14 @@ class Optuna:
         bst = xgb.train(param, dtrain = self.training_data)
         preds = bst.predict(self.test_data)
         pred_labels = np.rint(preds)
-        accuracy = sklearn.metrics.accuracy_score(self.test_data.get_label(), pred_labels)
+        accuracy = sklearn.metrics.mean_squared_error(self.test_data.get_label(), pred_labels)
         
         return accuracy
 
     def conduct_study(self, model):
         if model == 'xgb':
             modeller = self.xgb_objective
-        study = optuna.create_study(direction="maximize")
+        study = optuna.create_study(direction="minimize")
         study.optimize(modeller, n_trials=100, timeout=600)
 
         print("Number of finished trials: ", len(study.trials))
