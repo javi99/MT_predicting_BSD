@@ -280,11 +280,18 @@ data_dl_path = os.getcwd()+'/data/downloading/storage/'
 files_dl = os.listdir(data_dl_path)
 
 stations = [file for file in files_dl if 'Usage' not in file and 'movements' not in file and 'trips' not in file and '.DS_Store' not in file] 
+print(f"stations files: {set(stations)}")
 movements = list(set(files_dl) - set(stations))
+print(f"trips files: {set(movements)}")
+print(f"stations files: {len(set(stations))}, movements files: {len(set(movements))}")
+print(f"total number of files: {len(set(stations)) + len(set(movements))}. Should be 24 per year extracted.")
 
 stations_data = create_stations_df(stations)
+print("stations dataframe created")
 
 movements_data = create_movements_df(movements)
+print("movements dataframe created")
 
+print(movements_data.head())
 stations_data.to_csv(os.getcwd() + '/processing/storage_final/stations_data_raw.csv')
 movements_data.to_csv(os.getcwd() + '/processing/storage_final/trips_data_raw.csv')

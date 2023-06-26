@@ -28,6 +28,10 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+processing/feature_engineering/credentials.py
+modelling/
+models/pytorch_geometrical
+models/developing/data_bicimad
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
