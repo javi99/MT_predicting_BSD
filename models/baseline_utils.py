@@ -6,12 +6,15 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import copy
 from sklearn.model_selection import train_test_split
+from statsmodels.tsa.stattools import adfuller
+
+
 
 
 class baseline_model:
 
 
-    def create_modeling_datasets(self, dataset, timeperiods, validation_size):
+    def create_modeling_datasets(self, dataset, timeperiods):
     # timeperiod is a list of datetime date tuples: (start_date, end_date)
 
         data = copy.deepcopy(dataset)
@@ -20,27 +23,14 @@ class baseline_model:
     
         for timeperiod in timeperiods:
             test = data[(data['time'] >= timeperiod[0]) & (data['time'] <= timeperiod[1])]
-            train = data[(data['time'] < timeperiod[0]) | (data['time'] > timeperiod[1])]
-            train, validation = train_test_split(train, test_size=validation_size, random_state=55)
+            train = data[data['time'] < timeperiod[0]]
             train.sort_values('time', inplace = True)
-            validation.sort_values('time', inplace = True)
             test.sort_values('time', inplace = True)
 
-            train_test_sets.append([train, validation, test])
+            train_test_sets.append([train, test])
     
         return train_test_sets            
-                    
-
-    def train_model(self, grid_search, parameters, model, X_train, y_train):
-
-        if grid_search == True:
-            grid_model = GridSearchCV(estimator=model, param_grid=parameters, cv=5)
-            grid_model.fit(X_train, y_train)
-            return grid_model
-        else:
-            model.fit(X_train, y_train)
-            return model
-                                    
+                                                     
 
     def evaluate_metrics(self, target_true, target_predictions, model, target):
         
@@ -70,18 +60,18 @@ class baseline_model:
     def create_feature_datasets(self, datasets, features, scaler_type):
         # datasets is a lists of lists:  [train dataframe, test dataframe]
         feature_datasets = copy.deepcopy(datasets)
+        
         if scaler_type == 'standard':
             scaler = StandardScaler()
+        
         if scaler_type == 'minmax':
             scaler = MinMaxScaler()
 
         for dataset in feature_datasets:
             dataset[0] = dataset[0][features]
             dataset[1] = dataset[1][features]
-            dataset[2]  = dataset[2][features]
             dataset[0] = pd.DataFrame(scaler.fit_transform(dataset[0]), columns = features)
             dataset[1] = pd.DataFrame(scaler.transform(dataset[1]), columns = features)
-            dataset[2] = pd.DataFrame(scaler.transform(dataset[2]), columns = features)
         
         return feature_datasets
     
@@ -91,9 +81,72 @@ class baseline_model:
        
         for dataset in target_datasets:
             dataset[0] = dataset[0][target]
-            dataset[1] = dataset[1][target]
-            dataset[2] = dataset[2][target]        
+            dataset[1] = dataset[1][target]    
         
         return target_datasets
+    
+    def basic_baseline(self, data):
+
+        baseline_set = copy.deepcopy(data)
+
+        baseline_set.sort_values(['number', 'time'], inplace = True)
+        baseline_set.set_index('time', inplace = True)
+        baseline_set['pred_unplugs'] =  baseline_set['unplugs_count'].shift(168)
+        baseline_set['pred_plugs'] = baseline_set['plugs_count'].shift(168)
+
+        return baseline_set
+    
+    def stationarity_test(self, data, target, significance_level):
+        stationarity_dataset = copy.deepcopy(data)
+        stationarity_dataset.sort_values(['time'], inplace = True)
+        stationarity_dataset.set_index('time', inplace = True)
+        result = adfuller(stationarity_dataset[f"{target}"].values)
+        pvalue = result[1]
+        if pvalue < significance_level:
+            print(f'Augmented Dickey-Fuller test p-value: {pvalue}. The time series is stationary')
+        else:
+            print(f'Augmented Dickey-Fuller test p-value: {pvalue}. The time series is not stationary')
+
+    def weekly_window_tuples(self, data, target):
+        window_data = copy.deepcopy(data)
+        window_data.sort_values(['year', 'week_of_year', 'weekday', 'hour', 'number'], inplace = True)
+        training_tuples = []
+        weeks = len(window_data['year_week_index'].unique())
+        for week in range(weeks):
+            if week + 1 == weeks:
+                break
+            else:
+                training_tuples.append(
+                (window_data[window_data['year_week_index'] == window_data['year_week_index'].unique()[week]].loc[:,:],
+                window_data[window_data['year_week_index'] == window_data['year_week_index'].unique()[week + 1]].loc[:,:]))
+
+
+
+        
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+        
+
+
+
+
+
+            
+
+
+
+
         
     

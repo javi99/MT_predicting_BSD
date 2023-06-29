@@ -12,20 +12,34 @@ from optuna_utils import Optuna
 # get data
 data_dir = '/Users/erikagutierrez/Documents/BSE/Term_3/Masters_Thesis/MT_predicting_BSD/processing/storage_final/'
 
-data = pd.read_csv(data_dir + 'bicimad_dataframe.csv')
+data = pd.read_csv(data_dir + 'bicimad_dataframe_2.csv')
 
 data.drop(['Unnamed: 0.2', 'Unnamed: 0.1', 'Unnamed: 0', 'Unnamed: 0_x', 'Unnamed: 0_y'], axis = 1, inplace = True)
 
 data['time'] = pd.to_datetime(data['time'])
 
-# define train test breakouts
+data['week_of_year'] = data['time'].apply(lambda x: int(x.strftime('%U')))
 
-forecast_cutoff_start = (max(data['time']) + dt.timedelta(days = -7)) + dt.timedelta(hours = 1) # start date of the last week of data
-forecast_cutoff_end = forecast_cutoff_start + dt.timedelta(days = 7) + dt.timedelta(hours = -1) # end date of the last week of data
+data['year_week_index'] = data.apply(lambda x: int(str(x['year']) + str(x['week_of_year'])), axis = 1)
+
+# Step 1: define train test breakout
+
+
+## Last week of data
+
+lastweek_start = (max(data['time']) + dt.timedelta(days = -7)) + dt.timedelta(hours = 1) # start date of the last week of data
+lastweek_end = lastweek_start + dt.timedelta(days = 7) + dt.timedelta(hours = -1) # end date of the last week of data
+
+## INNOVA Comparison Time Period
+
+innovaweek_start = dt.datetime('2021-06-24')
+
+## all of 2022
+
 
 baseline = baseline_model() # get baseline model class functions
 
-datasets = baseline.create_modeling_datasets(data, [(forecast_cutoff_start, forecast_cutoff_end)], .4) # result is a list of lists [train, validation, test] for each desired forecast period (need to add validation soon)
+datasets = baseline.create_modeling_datasets(data, [(lastweek_start, lastweek_end)]) # result is a list of lists [train, validation, test] for each desired forecast period (need to add validation soon)
 
 # decide what features to use and standardize them
 features = ['reservations_count', 
@@ -68,14 +82,12 @@ dmatrices_unplugs = []
 
 for n in range(len(datasets)):
     dtrain_plugs = xgb.DMatrix(feature_datasets[n][0], label=plug_target_datasets[n][0])
-    dvalid_plugs = xgb.DMatrix(feature_datasets[n][1], label=plug_target_datasets[n][1])
-    dtest_plugs = xgb.DMatrix(feature_datasets[n][2], label=plug_target_datasets[n][2])
-    dmatrices_plugs.append([dtrain_plugs, dvalid_plugs, dtest_plugs])
+    dtest_plugs = xgb.DMatrix(feature_datasets[n][1], label=plug_target_datasets[n][1])
+    dmatrices_plugs.append([dtrain_plugs, dtest_plugs])
     
     dtrain_unplugs = xgb.DMatrix(feature_datasets[n][0], label=unplug_target_datasets[n][0])
-    dvalid_unplugs = xgb.DMatrix(feature_datasets[n][1], label=unplug_target_datasets[n][1])
-    dtest_unplugs = xgb.DMatrix(feature_datasets[n][2], label=unplug_target_datasets[n][2])
-    dmatrices_unplugs.append([dtrain_unplugs, dvalid_unplugs, dtest_unplugs])
+    dtest_unplugs = xgb.DMatrix(feature_datasets[n][1], label=unplug_target_datasets[n][1])
+    dmatrices_unplugs.append([dtrain_unplugs, dtest_unplugs])
 
 
 # train test and review
@@ -114,21 +126,15 @@ for n in range(len(datasets)):
 
 baseline.display_feature_importance(xgb_plugs, feature_datasets[0][0])
 
+basic_baseline = baseline.basic_baseline(data)
+
+basic_baseline = basic_baseline.dropna()
+
+results = []
+results.append(baseline.evaluate_metrics(target_true = basic_baseline['unplugs_count'], target_predictions = basic_baseline['pred_unplugs'], model = 'Basic Baseline', target = 'unplugs'))
+results.append(baseline.evaluate_metrics(basic_baseline['plugs_count'], basic_baseline['pred_plugs'], 'Basic Baseline', 'plugs'))
+pd.DataFrame(results, columns = ['Model', 'target', 'RSME', 'MAE', 'R2'])
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
