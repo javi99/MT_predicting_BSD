@@ -185,7 +185,12 @@ for t in range(len(timeperiods)):
         pickle.dump(xgb_plugs, file)
     with open(xgb_unplugs_path, 'wb') as file:
         pickle.dump(xgb_unplugs, file)
-    pd.DataFrame({'train_plugs':plug_preds_train, 'train_unplugs':unplug_preds_train, 'test_plugs': plug_preds_test, 'test_unplugs':unplug_preds_test}).to_csv(f'run_{now}/predictions_fixed_{timeperiods_text[t]}')
+    pd.DataFrame({
+        'time': fixed_datasets[t]['time'],
+        'train_plugs':plug_preds_train, 
+        'train_unplugs':unplug_preds_train, 
+        'test_plugs': plug_preds_test, 
+        'test_unplugs':unplug_preds_test}).to_csv(f'run_{now}/predictions_fixed_{timeperiods_text[t]}')
 
 ### sequential datasets 
 
@@ -231,7 +236,12 @@ for t in range(len(timeperiods)):
     with open(xgb_unplugs_path, 'wb') as file:
         pickle.dump(xgb_unplugs, file)
 
-    pd.DataFrame({'train_plugs':plug_preds_train, 'train_unplugs':unplug_preds_train, 'test_plugs': plug_preds_test, 'test_unplugs':unplug_preds_test}).to_csv(f'run_{now}/predictions_sequential_{timeperiods_text[t]}')
+    pd.DataFrame({
+        'time': fixed_datasets[t]['time'],
+        'train_plugs':plug_preds_train, 
+        'train_unplugs':unplug_preds_train, 
+        'test_plugs': plug_preds_test, 
+        'test_unplugs':unplug_preds_test}).to_csv(f'run_{now}/predictions_sequential_{timeperiods_text[t]}')
     
 
 pd.DataFrame(results, columns = ['model', 'target', 'timeperiod', 'breakout', 'rsme', 'mae', 'r2']).to_csv(f'run_{now}/results.csv')
