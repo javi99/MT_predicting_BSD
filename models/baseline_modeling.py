@@ -178,14 +178,14 @@ for t in range(len(timeperiods)):
     results.append(baseline.evaluate_metrics(fixed_datasets_plugs[t][0], plug_preds_train, 'XGBOOST', 'Plugs', timeperiods_text[t], 'train set'))
     results.append(baseline.evaluate_metrics(fixed_datasets_unplugs[t][0], unplug_preds_train, 'XGBOOST', 'Unplugs', timeperiods_text[t], 'train set'))
 
-    print("Saving Models....")
+    print("Saving models and predictions....")
     xgb_plugs_path = f'run_{now}/plugs_fixed_{timeperiods_text[t]}.pkl'
     xgb_unplugs_path = f'run_{now}/unplugs_fixed_{timeperiods_text[t]}.pkl'
     with open(xgb_plugs_path, 'wb') as file:
         pickle.dump(xgb_plugs, file)
     with open(xgb_unplugs_path, 'wb') as file:
         pickle.dump(xgb_unplugs, file)
-    
+    pd.DataFrame({'train_plugs':plug_preds_train, 'train_unplugs':unplug_preds_train, 'test_plugs': plug_preds_test, 'test_unplugs':unplug_preds_test}).to_csv(f'run_{now}/predictions_fixed_{timeperiods_text[t]}')
 
 ### sequential datasets 
 
@@ -223,7 +223,7 @@ for t in range(len(timeperiods)):
     results.append(baseline.evaluate_metrics(fixed_datasets_plugs[t][0], plug_preds_train, 'XGBOOST', 'Plugs', timeperiods_text[t], 'train set'))
     results.append(baseline.evaluate_metrics(fixed_datasets_unplugs[t][0], unplug_preds_train, 'XGBOOST', 'Unplugs', timeperiods_text[t], 'train set'))
 
-    print("Saving Models...")
+    print("Saving models and predictions...")
     xgb_plugs_path = f'run_{now}/plugs_sequential_{timeperiods_text[t]}.pkl'
     xgb_unplugs_path = f'run_{now}/unplugs_sequential_{timeperiods_text[t]}.pkl'
     with open(xgb_plugs_path, 'wb') as file:
@@ -231,6 +231,8 @@ for t in range(len(timeperiods)):
     with open(xgb_unplugs_path, 'wb') as file:
         pickle.dump(xgb_unplugs, file)
 
+    pd.DataFrame({'train_plugs':plug_preds_train, 'train_unplugs':unplug_preds_train, 'test_plugs': plug_preds_test, 'test_unplugs':unplug_preds_test}).to_csv(f'run_{now}/predictions_sequential_{timeperiods_text[t]}')
+    
 
 pd.DataFrame(results, columns = ['model', 'target', 'timeperiod', 'breakout', 'rsme', 'mae', 'r2']).to_csv(f'run_{now}/results.csv')
 
