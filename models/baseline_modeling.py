@@ -117,7 +117,11 @@ sequential_datasets_unplugs = baseline.create_target_datasets(sequential_dataset
 # Step 3: Get Results
 
 now = dt.datetime.strftime(dt.datetime.now(), format = "%d-%m-%Y_%H:%M:%S")
+
+os.chdir(os.getcwd() + '/trainings')
+
 os.mkdir(f'run_{now}')
+
 
 results = []
 
