@@ -144,35 +144,43 @@ sequential_datasets_DMatrices_unplugs = baseline.create_DMatrices(sequential_dat
 
 ### fixed datasets
 
-for n in range(len(timeperiods)):
+for t in range(len(timeperiods)):
 
     # hyperparameter tunings
     print('Starting hyperparameter search...')
 
-    parameter_search_plugs = Optuna(fixed_datasets_DMatrices_plugs[n][0], fixed_datasets_DMatrices_plugs[n][1])
-    parameter_search_unplugs = Optuna(fixed_datasets_DMatrices_unplugs[n][0], fixed_datasets_DMatrices_unplugs[n][1])
+    parameter_search_plugs = Optuna(fixed_datasets_DMatrices_plugs[t][0], fixed_datasets_DMatrices_plugs[t][1])
+    parameter_search_unplugs = Optuna(fixed_datasets_DMatrices_unplugs[t][0], fixed_datasets_DMatrices_unplugs[t][1])
 
     optimal_parameters_plugs = parameter_search_plugs.conduct_study('xgb')
     optimal_parameters_unplugs = parameter_search_unplugs.conduct_study('xgb')
 
     # train model with optimal parameters
     print('Training model with optimal parameters...')
-    xgb_plugs = xgb.XGBRegressor(**optimal_parameters_plugs, objective='reg:squarederror').fit(fixed_datasets_features[n][0], fixed_datasets_plugs[n][0])
-    xgb_unplugs = xgb.XGBRegressor(**optimal_parameters_plugs, objective='reg:squarederror').fit(fixed_datasets_features[n][0], fixed_datasets_unplugs[n][0])
+    xgb_plugs = xgb.XGBRegressor(**optimal_parameters_plugs, objective='reg:squarederror').fit(fixed_datasets_features[t][0], fixed_datasets_plugs[t][0])
+    xgb_unplugs = xgb.XGBRegressor(**optimal_parameters_plugs, objective='reg:squarederror').fit(fixed_datasets_features[t][0], fixed_datasets_unplugs[t][0])
 
     # predict target
     print('Predicting...')
-    plug_preds = xgb_plugs.predict(fixed_datasets_features[n][1])
-    unplug_preds = xgb_unplugs.predict(fixed_datasets_features[n][1])
+    #test datasets
+    plug_preds_test = xgb_plugs.predict(fixed_datasets_features[t][1])
+    unplug_preds_test = xgb_unplugs.predict(fixed_datasets_features[t][1])
+
+    #train datasets
+    plug_preds_train = xgb_plugs.predict(fixed_datasets_features[t][0])
+    unplug_preds_train = xgb_unplugs.predict(fixed_datasets_features[t][0])
 
     # compute results
     print("Computing results...")
-    results.append(baseline.evaluate_metrics(fixed_datasets_plugs[n][1], plug_preds, 'XGBOOST', 'Plugs', timeperiods_text[n]))
-    results.append(baseline.evaluate_metrics(fixed_datasets_unplugs[n][1], unplug_preds, 'XGBOOST', 'Unplugs', timeperiods_text[n]))
+    results.append(baseline.evaluate_metrics(fixed_datasets_plugs[t][1], plug_preds_test, 'XGBOOST', 'Plugs', timeperiods_text[t], 'test set'))
+    results.append(baseline.evaluate_metrics(fixed_datasets_unplugs[t][1], unplug_preds_test, 'XGBOOST', 'Unplugs', timeperiods_text[t], 'test set'))
+    
+    results.append(baseline.evaluate_metrics(fixed_datasets_plugs[t][0], plug_preds_train, 'XGBOOST', 'Plugs', timeperiods_text[t], 'train set'))
+    results.append(baseline.evaluate_metrics(fixed_datasets_unplugs[t][0], unplug_preds_train, 'XGBOOST', 'Unplugs', timeperiods_text[t], 'train set'))
 
     print("Saving Models....")
-    xgb_plugs_path = f'run_{now}/plugs_fixed_{timeperiods_text[n]}.pkl'
-    xgb_unplugs_path = f'run_{now}/unplugs_fixed_{timeperiods_text[n]}.pkl'
+    xgb_plugs_path = f'run_{now}/plugs_fixed_{timeperiods_text[t]}.pkl'
+    xgb_unplugs_path = f'run_{now}/unplugs_fixed_{timeperiods_text[t]}.pkl'
     with open(xgb_plugs_path, 'wb') as file:
         pickle.dump(xgb_plugs, file)
     with open(xgb_unplugs_path, 'wb') as file:
@@ -200,24 +208,31 @@ for t in range(len(timeperiods)):
 
     # predict target
     print('Predicting...')
-    plug_preds = xgb_plugs.predict(fixed_datasets_features[t][1])
-    unplug_preds = xgb_unplugs.predict(fixed_datasets_features[t][1])
+    # test datasets
+    plug_preds_test = xgb_plugs.predict(fixed_datasets_features[t][1])
+    unplug_preds_test = xgb_unplugs.predict(fixed_datasets_features[t][1])
+    #train datasets
+    plug_preds_train = xgb_plugs.predict(fixed_datasets_features[t][0])
+    unplug_preds_train = xgb_unplugs.predict(fixed_datasets_features[t][0])
 
     # compute results
     print("Computing results...")
-    results.append(baseline.evaluate_metrics(fixed_datasets_plugs[t][1], plug_preds, 'XGBOOST', 'Plugs', timeperiods_text[t]))
-    results.append(baseline.evaluate_metrics(fixed_datasets_unplugs[t][1], unplug_preds, 'XGBOOST', 'Unplugs', timeperiods_text[t]))
+    results.append(baseline.evaluate_metrics(fixed_datasets_plugs[t][1], plug_preds_test, 'XGBOOST', 'Plugs', timeperiods_text[t], 'test set'))
+    results.append(baseline.evaluate_metrics(fixed_datasets_unplugs[t][1], unplug_preds_test, 'XGBOOST', 'Unplugs', timeperiods_text[t], 'test set'))
+    
+    results.append(baseline.evaluate_metrics(fixed_datasets_plugs[t][0], plug_preds_train, 'XGBOOST', 'Plugs', timeperiods_text[t], 'train set'))
+    results.append(baseline.evaluate_metrics(fixed_datasets_unplugs[t][0], unplug_preds_train, 'XGBOOST', 'Unplugs', timeperiods_text[t], 'train set'))
 
     print("Saving Models...")
-    xgb_plugs_path = f'run_{now}/plugs_sequential_{timeperiods_text[n]}.pkl'
-    xgb_unplugs_path = f'run_{now}/unplugs_sequential_{timeperiods_text[n]}.pkl'
+    xgb_plugs_path = f'run_{now}/plugs_sequential_{timeperiods_text[t]}.pkl'
+    xgb_unplugs_path = f'run_{now}/unplugs_sequential_{timeperiods_text[t]}.pkl'
     with open(xgb_plugs_path, 'wb') as file:
         pickle.dump(xgb_plugs, file)
     with open(xgb_unplugs_path, 'wb') as file:
         pickle.dump(xgb_unplugs, file)
 
 
-pd.DataFrame(results, columns = ['model', 'target', 'timeperiod', 'rsme', 'mae', 'r2']).to_csv(f'run_{now}/results.csv')
+pd.DataFrame(results, columns = ['model', 'target', 'timeperiod', 'breakout', 'rsme', 'mae', 'r2']).to_csv(f'run_{now}/results.csv')
 
 
 

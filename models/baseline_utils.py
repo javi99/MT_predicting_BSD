@@ -32,13 +32,13 @@ class baseline_model:
         return train_test_sets            
                                                      
 
-    def evaluate_metrics(self, target_true, target_predictions, model, target, timeperiod):
+    def evaluate_metrics(self, target_true, target_predictions, model, target, timeperiod, breakout):
         
         rmse = np.sqrt(mean_squared_error(target_true, target_predictions))
         mae = mean_absolute_error(target_true, target_predictions)
         r2 = r2_score(target_true, target_predictions)
                         
-        results_list = [model, target, timeperiod, rmse, mae, r2]
+        results_list = [model, target, timeperiod, breakout, rmse, mae, r2]
 
         return results_list
                         
