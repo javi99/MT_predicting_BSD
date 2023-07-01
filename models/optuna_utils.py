@@ -16,9 +16,8 @@ import sklearn.metrics
 
 class Optuna:
 
-    def __init__(self, training, validation, test):
+    def __init__(self, training, test):
         self.training_data = training
-        self.validation_data = validation
         self.test_data = test
 
     def xgb_objective(self, trial):
