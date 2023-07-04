@@ -21,6 +21,6 @@ processing
 - The folder `Feature Engineering` contains the code we used to create the final dataframe of our features and targets. Also contains the script to collect the data used to populate our adjancency matrix. 
 
 models
-contains the various scripts used for creating, training, testing, and assessing our models. The `baseline_modeling.py` contains the code for the baseline and XGBOOST model and `GNN_Main.py` contains the code for the GCNN model. 
+- contains the various scripts used for creating, training, testing, and assessing our models. The `baseline_modeling.py` contains the code for the baseline and XGBOOST model and `GNN_Main.py` contains the code for the GCNN model. 
 
 
