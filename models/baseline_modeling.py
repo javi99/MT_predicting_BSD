@@ -3,131 +3,351 @@ import pandas as pd
 import datetime as dt
 import os 
 import matplotlib.pyplot as plt
+import time
+import pickle
 
 os.chdir(os.getcwd() + '/models')
 
 from baseline_utils import baseline_model
 from optuna_utils import Optuna
 
-# get data
-data_dir = '/Users/erikagutierrez/Documents/BSE/Term_3/Masters_Thesis/MT_predicting_BSD/processing/storage_final/'
-
-data = pd.read_csv(data_dir + 'bicimad_dataframe.csv')
-
-data.drop(['Unnamed: 0.2', 'Unnamed: 0.1', 'Unnamed: 0', 'Unnamed: 0_x', 'Unnamed: 0_y'], axis = 1, inplace = True)
-
-data['time'] = pd.to_datetime(data['time'])
-
-# define train test breakouts
-
-forecast_cutoff_start = (max(data['time']) + dt.timedelta(days = -7)) + dt.timedelta(hours = 1) # start date of the last week of data
-forecast_cutoff_end = forecast_cutoff_start + dt.timedelta(days = 7) + dt.timedelta(hours = -1) # end date of the last week of data
 
 baseline = baseline_model() # get baseline model class functions
 
-datasets = baseline.create_modeling_datasets(data, [(forecast_cutoff_start, forecast_cutoff_end)], .4) # result is a list of lists [train, validation, test] for each desired forecast period (need to add validation soon)
+# Step 0: get data
 
-# decide what features to use and standardize them
-features = ['reservations_count', 
-            'light', 
-            'total_bases', 
-            'free_bases', 
-            'no_available', 
-            'dock_bikes', 
-            #'time', 
-            'day', 
-            'month', 
-            'year', 
-            'hour', 
-            'weekday', 
-            '81', 
-            '82', 
-            '83', 
-            '86', 
-            '87', 
-            '88', 
-            '89', 
-            'work_day_indicator', 
-            'covid_indicator']
+data_dir = '/Users/erikagutierrez/Documents/BSE/Term_3/Masters_Thesis/MT_predicting_BSD/processing/storage_final/'
 
-target_plugs = 'plugs_count'
-target_unplugs = 'unplugs_count'
+data = pd.read_csv(data_dir + 'XGBoost_data_not_standardized_or_splited.csv')
+events_data = pd.read_csv(data_dir + 'events_final.csv')
 
-feature_datasets = baseline.create_feature_datasets(datasets, features, 'standard') # create and standardize the train and test feature datasets  
-plug_target_datasets = baseline.create_target_datasets(datasets, target_plugs) # create the train and test plug target vectors
-unplug_target_datasets = baseline.create_target_datasets(datasets, target_unplugs) # create the train and test unplug target vectors
+data.drop(['Unnamed: 0', 'covid_indicator', 'work_day_indicator'], axis = 1, inplace = True)
 
-# train models
+data['time'] = pd.to_datetime(data['time'])
 
-# XGBOOST
+data['week_of_year'] = data['time'].apply(lambda x: int(x.strftime('%U')))
 
-# Get DMatrices 
+data['weekday'] = data['time'].apply(lambda x: int(x.isoweekday()))
 
-dmatrices_plugs = []
-dmatrices_unplugs = []
+data[data['weekday'] == 7].loc[:] = 0 # change sunday to start of week for proper sorting
 
-for n in range(len(datasets)):
-    dtrain_plugs = xgb.DMatrix(feature_datasets[n][0], label=plug_target_datasets[n][0])
-    dvalid_plugs = xgb.DMatrix(feature_datasets[n][1], label=plug_target_datasets[n][1])
-    dtest_plugs = xgb.DMatrix(feature_datasets[n][2], label=plug_target_datasets[n][2])
-    dmatrices_plugs.append([dtrain_plugs, dvalid_plugs, dtest_plugs])
-    
-    dtrain_unplugs = xgb.DMatrix(feature_datasets[n][0], label=unplug_target_datasets[n][0])
-    dvalid_unplugs = xgb.DMatrix(feature_datasets[n][1], label=unplug_target_datasets[n][1])
-    dtest_unplugs = xgb.DMatrix(feature_datasets[n][2], label=unplug_target_datasets[n][2])
-    dmatrices_unplugs.append([dtrain_unplugs, dvalid_unplugs, dtest_unplugs])
+data['hour'] = data['time'].apply(lambda x: x.hour)
+
+data['day'] = data['time'].apply(lambda x: x.day)
+
+data['month'] = data['time'].apply(lambda x: x.month)
+
+data['year'] = data['time'].apply(lambda x: x.year)
 
 
-# train test and review
+data = pd.merge(data, events_data, on = ['dia_semana', 'day', 'month', 'year'])
 
-for n in range(len(datasets)):
 
-    # hyperparameter tuning
+# Add last week lag
+
+data.sort_values(['number', 'time'], inplace = True)
+data.set_index('time', inplace = True)
+data['unplugs_week_lag'] =  data['unplugs_count'].shift(168)
+data['plugs_week_lag'] = data['plugs_count'].shift(168)
+data.reset_index(inplace=True)
+data['time'] = pd.to_datetime(data['time'])
+data.sort_values('time', inplace=True)
+
+# Step 1: define train test breakouts
+
+timeperiods_text = ['INNOVA_comparison', 'all_of_2022']
+
+train_start = dt.datetime.strptime('2019-01-06 00:00:00', '%Y-%m-%d %H:%M:%S')
+
+## INNOVA Comparison Time Period
+
+innovaweek_start = dt.datetime.strptime('2021-06-20 00:00:00', '%Y-%m-%d %H:%M:%S')
+innovaweek_end = dt.datetime.strptime('2021-07-03 23:00:00', '%Y-%m-%d %H:%M:%S')
+
+## All of 2022
+
+start_2022 = dt.datetime.strptime('2022-02-01 00:00:00', '%Y-%m-%d %H:%M:%S')
+end_2022 = dt.datetime.strptime('2022-12-31 23:00:00', '%Y-%m-%d %H:%M:%S')
+
+timeperiods = [(innovaweek_start, innovaweek_end), (start_2022, end_2022)]
+
+fixed_datasets = baseline.create_modeling_datasets(data, timeperiods, train_start)
+sequential_datasets = baseline.create_weekly_sequential_datasets(fixed_datasets) 
+
+# Step 2: Decide what features and make training matrices and target vectors
+
+features = [
+#'time', 
+ 'activate', 
+ #'name', 
+ 'reservations_count', 
+ 'total_bases',
+ 'free_bases', 
+ #'number', 
+ 'no_available', 
+ #'address', 
+ 'dock_bikes',
+ #'id_station', 
+ #'year', 
+ #'plugs_count', 
+ #'unplugs_count', 
+ 'latitude',
+ 'longitude', 
+ '83', 
+ '86', 
+ '87', 
+ '88', 
+ '89', 
+ #'dia_semana', 
+ #'index',
+ #'year_week_index', 
+ 'month_sin', 
+ 'month_cos', 
+ 'day_sin', 
+ 'day_cos',
+ 'hour_sin', 
+ 'hour_cos', 
+ 'weekday_sin', 
+ 'weekday_cos',
+ 'week_of_year_sin', 
+ 'week_of_year_cos', 
+ 'wind_cos', 
+ 'wind_sin',
+ 'light0', 
+ 'light1', 
+ 'light2', 
+ 'light3', 
+ #'week_of_year', 
+ #'weekday',
+ #'hour', 
+ #'day', 
+ #'month', 
+ #'Unnamed: 0', 
+ 'work_day_indicator',
+ 'covid_indicator', 
+ 'unplugs_week_lag', 
+ 'plugs_week_lag']
+
+
+
+final_output_columns = ['activate', 
+                        'name', 
+                        'reservations_count', 
+                        'total_bases', 
+                        'free_bases', 
+                        'number', 
+                        'no_available', 
+                        'address', 
+                        'dock_bikes', 
+                        'id_station', 
+                        'time', 
+                        'year',
+                        'latitude', 
+                        'longitude', 
+                        '83', 
+                        '86', 
+                        '87', 
+                        '88', 
+                        '89', 
+                        'dia_semana', 
+                        'work_day_indicator', 
+                        'covid_indicator', 
+                        'index', 
+                        'year_week_index', 
+                        'month_sin', 
+                        'month_cos',
+                        'day_sin', 
+                        'day_cos', 
+                        'hour_sin', 
+                        'hour_cos', 
+                        'weekday_sin', 
+                        'weekday_cos', 
+                        'week_of_year_sin',
+                        'week_of_year_cos',
+                        'wind_cos', 
+                        'wind_sin',
+                        'light0', 
+                        'light1', 
+                        'light2', 
+                        'light3',
+                        'unplugs_week_lag',
+                        'plugs_week_lag']
+
+
+fixed_datasets_features = baseline.create_feature_datasets(fixed_datasets, features, 'fixed', 'minmax')
+fixed_datasets_plugs = baseline.create_target_datasets(fixed_datasets, 'plugs_count', 'fixed')
+fixed_datasets_unplugs = baseline.create_target_datasets(fixed_datasets, 'unplugs_count', 'fixed')
+
+sequential_datasets_features = baseline.create_feature_datasets(sequential_datasets, features, 'sequential', 'minmax')
+sequential_datasets_plugs = baseline.create_target_datasets(sequential_datasets, 'plugs_count', 'sequential')
+sequential_datasets_unplugs = baseline.create_target_datasets(sequential_datasets, 'unplugs_count', 'sequential')
+
+
+# Step 3: Get Results
+
+now = dt.datetime.strftime(dt.datetime.now(), format = "%d-%m-%Y_%H:%M:%S")
+
+os.chdir(os.getcwd() + '/trainings')
+
+os.mkdir(f'run_{now}')
+
+
+results = []
+
+## Basic Baseline 
+
+basic_baseline = baseline.basic_baseline(data)
+
+basic_baseline = basic_baseline.dropna()
+
+results.append(baseline.evaluate_metrics(basic_baseline['unplugs_count'], basic_baseline['pred_unplugs'], 'Basic Baseline', 'unplugs', 'all timeperiods', 'all data'))
+results.append(baseline.evaluate_metrics(basic_baseline['plugs_count'], basic_baseline['pred_plugs'], 'Basic Baseline', 'plugs', 'all timeperiods', 'all data'))
+
+## XGBOOST
+
+### transform data to DMatrices for faster training
+fixed_datasets_DMatrices_plugs = baseline.create_DMatrices(fixed_datasets_features, fixed_datasets_plugs, 'fixed')
+fixed_datasets_DMatrices_unplugs = baseline.create_DMatrices(fixed_datasets_features, fixed_datasets_unplugs, 'fixed')
+sequential_datasets_DMatrices_plugs = baseline.create_DMatrices(sequential_datasets_features, sequential_datasets_plugs, 'sequential')
+sequential_datasets_DMatrices_unplugs = baseline.create_DMatrices(sequential_datasets_features, sequential_datasets_unplugs, 'sequential')
+
+### fixed datasets
+
+for t in range(len(timeperiods)):
+
+    # hyperparameter tunings
     print('Starting hyperparameter search...')
 
-    parameter_search_plugs = Optuna(dmatrices_plugs[n][0], dmatrices_plugs[n][1], dmatrices_plugs[n][2])
-    parameter_search_unplugs = Optuna(dmatrices_unplugs[n][0], dmatrices_unplugs[n][1], dmatrices_unplugs[n][2])
+    parameter_search_plugs = Optuna(fixed_datasets_DMatrices_plugs[t][0], fixed_datasets_DMatrices_plugs[t][1])
+    parameter_search_unplugs = Optuna(fixed_datasets_DMatrices_unplugs[t][0], fixed_datasets_DMatrices_unplugs[t][1])
 
     optimal_parameters_plugs = parameter_search_plugs.conduct_study('xgb')
     optimal_parameters_unplugs = parameter_search_unplugs.conduct_study('xgb')
 
     # train model with optimal parameters
     print('Training model with optimal parameters...')
-    xgb_plugs = xgb.XGBRegressor(**optimal_parameters_plugs, objective='reg:squarederror').fit(feature_datasets[n][0], plug_target_datasets[n][0])
-    xgb_unplugs = xgb.XGBRegressor(**optimal_parameters_unplugs, objective='reg:squarederror').fit(feature_datasets[n][0], unplug_target_datasets[n][0])
+    xgb_plugs = xgb.XGBRegressor(**optimal_parameters_plugs, objective='reg:squarederror').fit(fixed_datasets_features[t][0], fixed_datasets_plugs[t][0])
+    xgb_unplugs = xgb.XGBRegressor(**optimal_parameters_unplugs, objective='reg:squarederror').fit(fixed_datasets_features[t][0], fixed_datasets_unplugs[t][0])
 
     # predict target
     print('Predicting...')
-    plug_preds = xgb_plugs.predict(feature_datasets[n][2])
-    unplug_preds = xgb_unplugs.predict(feature_datasets[n][2])
+    #test datasets
+    plug_preds_test = xgb_plugs.predict(fixed_datasets_features[t][1])
+    unplug_preds_test = xgb_unplugs.predict(fixed_datasets_features[t][1])
+
+    #train datasets
+    plug_preds_train = xgb_plugs.predict(fixed_datasets_features[t][0])
+    unplug_preds_train = xgb_unplugs.predict(fixed_datasets_features[t][0])
 
     # compute results
     print("Computing results...")
-    results = []
-    results.append(baseline.evaluate_metrics(plug_target_datasets[n][2], plug_preds, 'XGBOOST', 'Plugs'))
-    results.append(baseline.evaluate_metrics(unplug_target_datasets[n][2], unplug_preds, 'XGBOOST', 'Unplugs'))
-
-    pd.DataFrame(results, columns = ['Model Name', 'Target Feature','RSME', 'MAE', 'R2'])
-
-# compute feature importances
-
-baseline.display_feature_importance(xgb_plugs, feature_datasets[0][0])
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    results.append(baseline.evaluate_metrics(fixed_datasets_plugs[t][1], plug_preds_test, 'XGBOOST', 'plugs', timeperiods_text[t], 'test set'))
+    results.append(baseline.evaluate_metrics(fixed_datasets_unplugs[t][1], unplug_preds_test, 'XGBOOST', 'unplugs', timeperiods_text[t], 'test set'))
     
+    results.append(baseline.evaluate_metrics(fixed_datasets_plugs[t][0], plug_preds_train, 'XGBOOST', 'plugs', timeperiods_text[t], 'train set'))
+    results.append(baseline.evaluate_metrics(fixed_datasets_unplugs[t][0], unplug_preds_train, 'XGBOOST', 'unplugs', timeperiods_text[t], 'train set'))
+
+    print("Saving models and predictions....")
+    xgb_plugs_path = f'run_{now}/plugs_fixed_{timeperiods_text[t]}.pkl'
+    xgb_unplugs_path = f'run_{now}/unplugs_fixed_{timeperiods_text[t]}.pkl'
+    with open(xgb_plugs_path, 'wb') as file:
+        pickle.dump(xgb_plugs, file)
+    with open(xgb_unplugs_path, 'wb') as file:
+        pickle.dump(xgb_unplugs, file)
+
+
+    final_output_frame = {}
+
+    for col in final_output_columns:
+        final_output_frame.update({col:fixed_datasets[t][1][col]})
+
+    final_output_frame.update({'prediction_plugs': plug_preds_test,
+        'true_value_plugs': fixed_datasets_plugs[t][1],  
+        'prediction_unplugs': unplug_preds_test,
+        'true_value_unplugs':fixed_datasets_unplugs[t][1]})
+
+
+    pd.DataFrame({
+        'train_time': fixed_datasets[t][0]['time'],
+        'number': fixed_datasets[t][0]['number'],
+        'week_index': fixed_datasets[t][0]['year_week_index'],
+        'train_plugs_pred': plug_preds_train, 
+        'train_plugs_actual': fixed_datasets_plugs[t][0],
+        'train_unplugs_pred': unplug_preds_train,
+        'train_unplugs_actual': fixed_datasets_unplugs[t][0]}).to_csv(f'run_{now}/predictions_fixed_{timeperiods_text[t]}_train.csv')
+
+    pd.DataFrame(final_output_frame).to_csv(f'run_{now}/predictions_fixed_{timeperiods_text[t]}_test.csv')
+
+### sequential datasets 
+
+for t in range(len(timeperiods)):
+
+    parameter_search_plugs = Optuna(fixed_datasets_DMatrices_plugs[t][0], fixed_datasets_DMatrices_plugs[t][1])
+    parameter_search_unplugs = Optuna(fixed_datasets_DMatrices_unplugs[t][0], fixed_datasets_DMatrices_unplugs[t][1])
+
+    optimal_parameters_plugs = parameter_search_plugs.conduct_study('xgb')
+    optimal_parameters_unplugs = parameter_search_unplugs.conduct_study('xgb')
+    
+    xgb_plugs = xgb.XGBRegressor(**optimal_parameters_plugs, objective='reg:squarederror')
+    xgb_unplugs = xgb.XGBRegressor(**optimal_parameters_unplugs, objective='reg:squarederror')
+    
+    for p in range(len(sequential_datasets[t])):
+
+        print('Training model with optimal parameters...')
+        xgb_plugs.fit(sequential_datasets_features[t][p][0], sequential_datasets_plugs[t][p][0])
+        xgb_unplugs.fit(sequential_datasets_features[t][p][0], sequential_datasets_unplugs[t][p][0])
+
+    # predict target
+    print('Predicting...')
+    # test datasets
+    plug_preds_test = xgb_plugs.predict(fixed_datasets_features[t][1])
+    unplug_preds_test = xgb_unplugs.predict(fixed_datasets_features[t][1])
+    #train datasets
+    plug_preds_train = xgb_plugs.predict(fixed_datasets_features[t][0])
+    unplug_preds_train = xgb_unplugs.predict(fixed_datasets_features[t][0])
+
+    # compute results
+    print("Computing results...")
+    results.append(baseline.evaluate_metrics(fixed_datasets_plugs[t][1], plug_preds_test, 'XGBOOST', 'Plugs', timeperiods_text[t], 'test set'))
+    results.append(baseline.evaluate_metrics(fixed_datasets_unplugs[t][1], unplug_preds_test, 'XGBOOST', 'Unplugs', timeperiods_text[t], 'test set'))
+    
+    results.append(baseline.evaluate_metrics(fixed_datasets_plugs[t][0], plug_preds_train, 'XGBOOST', 'Plugs', timeperiods_text[t], 'train set'))
+    results.append(baseline.evaluate_metrics(fixed_datasets_unplugs[t][0], unplug_preds_train, 'XGBOOST', 'Unplugs', timeperiods_text[t], 'train set'))
+
+    print("Saving models and predictions...")
+    xgb_plugs_path = f'run_{now}/plugs_sequential_{timeperiods_text[t]}.pkl'
+    xgb_unplugs_path = f'run_{now}/unplugs_sequential_{timeperiods_text[t]}.pkl'
+    with open(xgb_plugs_path, 'wb') as file:
+        pickle.dump(xgb_plugs, file)
+    with open(xgb_unplugs_path, 'wb') as file:
+        pickle.dump(xgb_unplugs, file)
+
+    final_output_frame = {}
+
+    for col in final_output_columns:
+        final_output_frame.update({col:fixed_datasets[t][1][col]})
+
+    final_output_frame.update({'prediction_plugs': plug_preds_test,
+        'true_value_plugs': fixed_datasets_plugs[t][1],  
+        'prediction_unplugs': unplug_preds_test,
+        'true_value_unplugs':fixed_datasets_unplugs[t][1]})
+
+    pd.DataFrame({
+        'train_time': fixed_datasets[t][0]['time'],
+        'number': fixed_datasets[t][0]['number'],
+        'week_index': fixed_datasets[t][0]['year_week_index'],
+        'train_plugs_pred': plug_preds_train, 
+        'train_plugs_actual': fixed_datasets_plugs[t][0],
+        'train_unplugs_pred': unplug_preds_train,
+        'train_unplugs_actual': fixed_datasets_unplugs[t][0]}).to_csv(f'run_{now}/predictions_fixed_{timeperiods_text[t]}_train.csv')
+
+    pd.DataFrame(final_output_frame).to_csv(f'run_{now}/predictions_fixed_{timeperiods_text[t]}_test.csv')
+
+
+pd.DataFrame(results, columns = ['model', 'target', 'timeperiod', 'breakout', 'rsme', 'mae', 'r2']).to_csv(f'run_{now}/results.csv')
+
+
+
+
+
+
