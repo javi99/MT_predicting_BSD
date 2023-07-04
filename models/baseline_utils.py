@@ -42,10 +42,8 @@ class baseline_model:
 
         return results_list
                         
-    def display_feature_importance(self, fitted_model, fitted_data):
+    def display_feature_importance(self, fitted_model, features):
         fitted_model.feature_importances_
-
-        features = fitted_data.columns
 
         importances_clf = pd.Series(data = fitted_model.feature_importances_,
                                     index= features)
