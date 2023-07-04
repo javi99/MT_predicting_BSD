@@ -10,7 +10,7 @@
 
 We have three main folders: data, models, and processing
 
-In each of these folders there is a development folder that contains the notebooks we used to explore the data and test code that would be used to into our actual ML pipeline. 
+In each of these folders there is a development folder that contains the notebooks we used to explore the data and test code that would be used in our actual ML pipeline. 
 
 
 data
