@@ -8,7 +8,7 @@
 
 In this project we create build station level hourly demand forecasting models for BiciMAD, Madrid's bikeshare system. We first aggregated data from multiple open source online data portals into a cohesive dataset. The dataset contains houly level entries from January 1st, 2019 to December 31st, 2022 for all stations in the bikeshare system resulting in 8.1 million rows. We then test the performance of an XGBOOST and a Graph Convolutional Neural Network on this dataset to generate bike demand estimates.
 
-A summary of our project can be found [here](https://github.com/javi99/MT_predicting_BSD/blob/main/Master%20Thesis%20Final%20Presentation.pdf)
+A summary of our project can be found [here](https://github.com/javi99/MT_predicting_BSD/blob/main/Master%20Thesis%20Final%20Presentation.pdf).
 
 
 ### Repository Structure 
